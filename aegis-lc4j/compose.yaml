@@ -1,0 +1,16 @@
+services:
+  postgres:
+    # pgvector image = Postgres 16 + the `vector` extension (superset of plain PG).
+    # Serves both conversation memory (JDBC) and RAG embeddings (Phase 1).
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: aegis
+      POSTGRES_PASSWORD: aegis
+      POSTGRES_DB: aegis
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aegis"]
+      interval: 5s
+      timeout: 3s
+      retries: 10

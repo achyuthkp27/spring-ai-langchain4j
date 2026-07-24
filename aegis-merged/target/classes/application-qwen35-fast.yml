@@ -1,0 +1,35 @@
+# RECOMMENDED local profile — qwen3.5:4b for both the assistant and the ScopeGate
+# classifier. Activate with: --spring.profiles.active=qwen35-fast
+#
+# Model shoot-out (2026-07-08, 30-case tool suite / 14-case scope suite / 13
+# golden facts, this machine):
+#   qwen2.5:7b     83.3% tools · 92.9% scope · 11/13 facts (hallucinates policy)
+#   qwen3.5:2b     86.7% tools · 78.6% scope · injection-triggered a tool call
+#   granite4.1:3b  90.0% tools · false-blocks terse policy queries · 11/13 facts
+#   qwen3.5:4b     22/22 genuine tool cases · 100% scope · 13/13 facts · ~3s turns
+#   qwen3.5:9b     96.7% tools · 100% scope · 13/13 facts · 7-12s turns
+#
+# qwen3.5:4b's one weakness — it prefers calling a (harmless, authz-guarded,
+# read-only) tool over declining an off-domain request — is neutralized upstream:
+# ScopeGate blocks off-domain messages (100% on this model), InjectionScreen
+# catches injections, and authorization lives inside every tool.
+#
+# think:false is REQUIRED (qwen3.5 is a thinking family): without it the
+# classifier returns empty verdicts (gate fails open) and every turn pays
+# reasoning latency. One 2.7 GB model serves both roles — nothing is ever
+# evicted, prefill stays hot.
+spring:
+  config:
+    activate:
+      on-profile: qwen35-fast
+  ai:
+    ollama:
+      chat:
+        options:
+          model: qwen3.5:4b
+          temperature: 0.2
+          num-predict: 512
+
+aegis:
+  llm:
+    think: false
