@@ -1,0 +1,859 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>AegisAI — GenAI Engineering Study Guide</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2230; --line:#2a3140; --txt:#e6edf3;
+    --mut:#9aa5b1; --accent:#4ade80; --blue:#60a5fa; --amber:#fbbf24; --pink:#f472b6;
+    --code:#0b0f16; --kw:#ff7b72; --str:#a5d6ff; --com:#8b949e; --fn:#d2a8ff;
+  }
+  @media print{ :root{ --bg:#fff; --panel:#f6f8fa; --panel2:#eef1f5; --line:#d0d7de;
+    --txt:#111; --mut:#555; --code:#f6f8fa; --str:#0a3069; --kw:#cf222e; --com:#6e7781; --fn:#8250df;}
+    body{font-size:11px} .no-print{display:none} a{color:#111;text-decoration:none} .diagram{break-inside:avoid}
+    h1,h2,h3{break-after:avoid} .card,.snippet,figure{break-inside:avoid} }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:980px;margin:0 auto;padding:40px 24px 120px}
+  h1{font-size:34px;line-height:1.15;margin:0 0 6px;letter-spacing:-.5px}
+  h2{font-size:26px;margin:56px 0 14px;padding-top:14px;border-top:2px solid var(--line);letter-spacing:-.3px}
+  h3{font-size:20px;margin:34px 0 10px;color:#fff}
+  h4{font-size:16px;margin:22px 0 8px;color:var(--blue);text-transform:uppercase;letter-spacing:.6px}
+  p{margin:12px 0} ul,ol{margin:12px 0;padding-left:22px} li{margin:6px 0}
+  a{color:var(--blue)} code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;
+    background:var(--panel2);padding:1px 6px;border-radius:5px;color:#ffd9a8}
+  .sub{color:var(--mut);font-size:18px;margin:0 0 8px}
+  .meta{color:var(--mut);font-size:13px;margin-bottom:28px}
+  .toc{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 26px;margin:28px 0}
+  .toc h4{margin-top:0}
+  .toc ol{columns:2;column-gap:36px} .toc a{text-decoration:none}
+  .snippet{background:var(--code);border:1px solid var(--line);border-radius:10px;margin:16px 0;overflow:hidden}
+  .snippet .cap{background:var(--panel2);padding:6px 14px;font-size:12px;color:var(--mut);
+    border-bottom:1px solid var(--line);font-family:ui-monospace,monospace}
+  pre{margin:0;padding:16px 18px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:13px;line-height:1.6}
+  .k{color:var(--kw)} .s{color:var(--str)} .c{color:var(--com);font-style:italic} .f{color:var(--fn)}
+  .card{background:var(--panel);border:1px solid var(--line);border-left-width:4px;border-radius:10px;
+    padding:14px 18px;margin:18px 0}
+  .card.tip{border-left-color:var(--accent)} .card.warn{border-left-color:var(--amber)}
+  .card.key{border-left-color:var(--pink)} .card.info{border-left-color:var(--blue)}
+  .card b{color:#fff}
+  .lead{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;margin-bottom:4px}
+  .tip .lead{color:var(--accent)} .warn .lead{color:var(--amber)} .key .lead{color:var(--pink)} .info .lead{color:var(--blue)}
+  table{border-collapse:collapse;width:100%;margin:18px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:9px 12px;text-align:left;vertical-align:top}
+  th{background:var(--panel2);color:#fff} tr:nth-child(even) td{background:var(--panel)}
+  figure{margin:24px 0;text-align:center}
+  figcaption{color:var(--mut);font-size:13px;margin-top:8px}
+  .diagram{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px}
+  svg{max-width:100%;height:auto}
+  .mono{font-family:ui-monospace,monospace}
+  .pill{display:inline-block;background:var(--panel2);border:1px solid var(--line);border-radius:999px;
+    padding:2px 10px;font-size:12px;margin:2px 3px}
+  hr{border:0;border-top:1px solid var(--line);margin:40px 0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:700px){.grid2{grid-template-columns:1fr}.toc ol{columns:1}}
+  .kbd{font-family:ui-monospace,monospace;background:var(--panel2);border:1px solid var(--line);
+    border-bottom-width:2px;border-radius:6px;padding:1px 7px;font-size:12px}
+  .num{color:var(--accent);font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>AegisAI — GenAI Engineering Study Guide</h1>
+<p class="sub">From tokens to production: everything behind a secure banking LLM copilot</p>
+<p class="meta">A deep, self-contained reference built from the AegisAI project (Spring AI 1.0.9 · Java 17 · Ollama · pgvector).
+Read top to bottom to go from fundamentals to production patterns. <span class="no-print">Tip: open in a browser and use
+<span class="kbd">⌘/Ctrl + P → Save as PDF</span> for an offline copy.</span></p>
+
+<div class="card tip"><div class="lead">How to use this doc</div>
+Every concept is explained from first principles, then tied to <b>how it actually works in the AegisAI code</b>.
+Diagrams show the flows; code snippets show the mechanics; the glossary at the end defines every term.
+If a section references a term you don't know yet, it's defined either earlier or in the <a href="#glossary">glossary</a>.</div>
+
+<div class="toc no-print">
+<h4>Contents</h4>
+<ol>
+<li><a href="#p1">LLM Foundations</a></li>
+<li><a href="#tokens">Tokens &amp; Tokenization</a></li>
+<li><a href="#embed">Embeddings &amp; Vector Space</a></li>
+<li><a href="#temp">Temperature, Sampling &amp; Randomness</a></li>
+<li><a href="#rag">RAG: Retrieval-Augmented Generation</a></li>
+<li><a href="#ann">ANN, HNSW &amp; Vector Search</a></li>
+<li><a href="#hybrid">Hybrid Search: BM25 &amp; RRF</a></li>
+<li><a href="#rerank">Re-ranking &amp; Cross-Encoders</a></li>
+<li><a href="#tools">Agents &amp; Tool Calling</a></li>
+<li><a href="#cache">Semantic Caching</a></li>
+<li><a href="#guard">Guardrails &amp; Security</a></li>
+<li><a href="#resil">Resilience: Circuit Breaker &amp; Timeouts</a></li>
+<li><a href="#stream">Streaming</a></li>
+<li><a href="#eval">Observability &amp; Evals</a></li>
+<li><a href="#springai">Spring AI Mechanics</a></li>
+<li><a href="#codewalk">Code Walkthrough</a></li>
+<li><a href="#frameworks">Frameworks vs Raw Code</a></li>
+<li><a href="#roadmap">What Still Needs Learning</a></li>
+<li><a href="#glossary">Glossary</a></li>
+</ol>
+</div>
+
+<!-- ============================================================= -->
+<h2 id="p1">1 · LLM Foundations</h2>
+
+<p>A <b>Large Language Model (LLM)</b> is a neural network trained to predict the next <em>token</em> given the tokens
+so far. That single capability — "given this text, what comes next?" — when scaled to billions of parameters and
+trained on trillions of tokens, produces something that can answer questions, call tools, and write code. Everything
+in this guide is built on top of that one primitive: <b>next-token prediction</b>.</p>
+
+<p>An LLM is <b>stateless</b>. It has no memory between calls. Each request sends the <em>entire</em> conversation
+(system instructions + prior turns + the new message) as one block of text called the <b>context</b>. The model reads
+all of it and produces a continuation. "Memory" in a chatbot is an illusion we create by re-sending prior turns each
+time — which is exactly what our <code>ChatMemory</code> does (§<a href="#springai">15</a>).</p>
+
+<h4>The three message roles</h4>
+<ul>
+<li><b>system</b> — the standing instructions ("You are AegisAI, a bank operations copilot…"). Sets behavior and boundaries.</li>
+<li><b>user</b> — what the human typed.</li>
+<li><b>assistant</b> — what the model said (prior turns are fed back so it "remembers").</li>
+</ul>
+
+<div class="card key"><div class="lead">The core mental model</div>
+An LLM call = <span class="mono">[system + history + user message] → tokenize → neural net → probability distribution over next token → sample one → repeat until stop</span>.
+Understand this loop and everything else (temperature, streaming, context limits, cost) follows.</div>
+
+<!-- ============================================================= -->
+<h2 id="tokens">2 · Tokens &amp; Tokenization</h2>
+
+<p>Models don't see words or characters — they see <b>tokens</b>. A token is a chunk of text, typically a
+sub-word: common words are one token ("bank"), rarer words split into several ("provisional" → <span class="mono">prov</span>+<span class="mono">ision</span>+<span class="mono">al</span>).
+The mapping from text to tokens is done by a <b>tokenizer</b> using an algorithm like <b>BPE (Byte-Pair Encoding)</b>,
+which greedily merges the most frequent character pairs into a fixed vocabulary (~50k–100k tokens).</p>
+
+<h4>Why tokens matter to you as an engineer</h4>
+<ul>
+<li><b>Cost &amp; limits are measured in tokens</b>, not words. Rough rule: <span class="num">1 token ≈ 4 characters ≈ 0.75 words</span> in English.</li>
+<li>The <b>context window</b> is a token budget (e.g., qwen2.5 default 4096 in our config, others 128k+). System prompt + RAG chunks + history + question + the answer must all fit.</li>
+<li><b>Latency scales with tokens generated.</b> The model produces one token at a time (autoregressive), so a 500-token answer takes ~5× longer than a 100-token one. This is why we cap output with <code>num-predict: 1024</code>.</li>
+</ul>
+
+<div class="snippet"><div class="cap">application.yml — capping generated tokens</div>
+<pre><span class="c"># The model stops after at most 1024 tokens. Prevents runaway generation,</span>
+<span class="c"># bounds latency and cost. Too low → truncated answers (we hit this with 128).</span>
+options:
+  model: qwen2.5:7b
+  temperature: 0.2
+  <span class="k">num-predict</span>: <span class="s">1024</span></pre></div>
+
+<div class="card info"><div class="lead">Real bug we hit</div>
+Early on, structured-output JSON was being <b>cut off mid-object</b>. Cause: the default output cap was 128 tokens,
+too small for the JSON. Fix: raise <code>num-predict</code>. Lesson: <b>token limits are a real failure mode</b>, not a
+theoretical one — a truncated answer looks like a "bug" but is really the model hitting its output budget.</div>
+
+<p>We <b>measure</b> tokens on every call for cost/observability — the <code>TokenAuditAdvisor</code> logs prompt,
+completion, and total tokens:</p>
+
+<div class="snippet"><div class="cap">TokenAuditAdvisor.java — measuring token usage per call</div>
+<pre>log.<span class="f">info</span>(<span class="s">"ai.call model={} tenant={} elapsedMs={} promptTokens={} completionTokens={} totalTokens={}"</span>,
+    model, tenant, elapsedMs,
+    usage.<span class="f">getPromptTokens</span>(), usage.<span class="f">getCompletionTokens</span>(), usage.<span class="f">getTotalTokens</span>());</pre></div>
+
+<!-- ============================================================= -->
+<h2 id="embed">3 · Embeddings &amp; Vector Space</h2>
+
+<p>An <b>embedding</b> is a list of numbers (a <em>vector</em>) that represents the <em>meaning</em> of a piece of
+text. An embedding model maps text → a fixed-length vector (ours, <code>nomic-embed-text</code>, produces
+<span class="num">768</span> numbers). Texts with similar meaning land close together in this 768-dimensional space;
+unrelated texts land far apart. This is the mathematical foundation of both RAG and our semantic cache.</p>
+
+<figure><div class="diagram">
+<svg viewBox="0 0 720 300" role="img" aria-label="Embedding space with clustered concepts">
+  <rect x="0" y="0" width="720" height="300" fill="none"/>
+  <line x1="60" y1="250" x2="680" y2="250" stroke="#2a3140" stroke-width="2"/>
+  <line x1="60" y1="250" x2="60" y2="30" stroke="#2a3140" stroke-width="2"/>
+  <text x="670" y="270" fill="#9aa5b1" font-size="12">dim 1</text>
+  <text x="20" y="40" fill="#9aa5b1" font-size="12">dim 2</text>
+  <text x="30" y="20" fill="#9aa5b1" font-size="11">(really 768 dims)</text>
+  <!-- cluster A: disputes -->
+  <circle cx="180" cy="110" r="6" fill="#4ade80"/><text x="192" y="114" fill="#e6edf3" font-size="12">"file a dispute"</text>
+  <circle cx="150" cy="140" r="6" fill="#4ade80"/><text x="162" y="144" fill="#e6edf3" font-size="12">"chargeback deadline"</text>
+  <circle cx="205" cy="150" r="6" fill="#4ade80"/><text x="217" y="154" fill="#e6edf3" font-size="12">"dispute a charge"</text>
+  <ellipse cx="180" cy="135" rx="95" ry="55" fill="#4ade8018" stroke="#4ade8055"/>
+  <!-- cluster B: KYC -->
+  <circle cx="480" cy="90" r="6" fill="#60a5fa"/><text x="492" y="94" fill="#e6edf3" font-size="12">"KYC tiers"</text>
+  <circle cx="520" cy="120" r="6" fill="#60a5fa"/><text x="532" y="124" fill="#e6edf3" font-size="12">"verify identity"</text>
+  <ellipse cx="505" cy="110" rx="80" ry="45" fill="#60a5fa18" stroke="#60a5fa55"/>
+  <!-- query point -->
+  <circle cx="230" cy="180" r="7" fill="#f472b6"/><text x="242" y="184" fill="#f472b6" font-size="12">query: "how long to dispute?"</text>
+  <line x1="230" y1="180" x2="205" y2="150" stroke="#f472b6" stroke-dasharray="4" stroke-width="1.5"/>
+  <text x="150" y="230" fill="#9aa5b1" font-size="11">near → same meaning</text>
+  <text x="440" y="230" fill="#9aa5b1" font-size="11">far → different topic</text>
+</svg></div>
+<figcaption>Semantic space: similar meanings cluster. The query lands near the "dispute" cluster, so those chunks are retrieved.</figcaption></figure>
+
+<h4>Measuring closeness: cosine similarity</h4>
+<p>To ask "how similar are two vectors," we measure the <b>angle</b> between them, not the straight-line distance.
+This is <b>cosine similarity</b> = the cosine of the angle between the vectors:</p>
+<ul>
+<li><span class="num">1.0</span> = same direction = identical meaning.</li>
+<li><span class="num">0.0</span> = perpendicular = unrelated.</li>
+<li>Negative = opposite meaning.</li>
+</ul>
+<p>We use the angle (direction) rather than magnitude because <b>meaning is about direction</b> — a long document and a
+short phrase about the same topic point the same way even if their vectors have different lengths. Here's the exact
+cosine implementation from our semantic cache:</p>
+
+<div class="snippet"><div class="cap">SemanticCache.java — cosine similarity by hand</div>
+<pre><span class="k">private static double</span> <span class="f">cosine</span>(<span class="k">float</span>[] a, <span class="k">float</span>[] b){
+  <span class="k">double</span> dot=<span class="s">0</span>, na=<span class="s">0</span>, nb=<span class="s">0</span>;
+  <span class="k">for</span>(<span class="k">int</span> i=<span class="s">0</span>; i&lt;a.length; i++){
+    dot += a[i]*b[i];      <span class="c">// dot product (alignment)</span>
+    na  += a[i]*a[i];      <span class="c">// |a|²</span>
+    nb  += b[i]*b[i];      <span class="c">// |b|²</span>
+  }
+  <span class="k">return</span> dot / (Math.<span class="f">sqrt</span>(na)*Math.<span class="f">sqrt</span>(nb));  <span class="c">// dot / (|a||b|) = cos θ</span>
+}</pre></div>
+
+<h4>Distance metrics you'll meet</h4>
+<table>
+<tr><th>Metric</th><th>What it measures</th><th>When used</th></tr>
+<tr><td>Cosine similarity</td><td>Angle (direction) between vectors</td><td>Default for text embeddings (ours). Robust to length.</td></tr>
+<tr><td>Dot product</td><td>Alignment × magnitude</td><td>When vectors are normalized, equals cosine. Faster.</td></tr>
+<tr><td>Euclidean (L2)</td><td>Straight-line distance</td><td>Some models; sensitive to magnitude.</td></tr>
+</table>
+<p>Our pgvector index is configured for cosine: <code>distance-type: cosine_distance</code>.</p>
+
+<div class="card key"><div class="lead">The most valuable embedding insight from this project</div>
+<b>Retrieval embeddings ≠ similarity embeddings.</b> They are trained for <em>different</em> jobs:
+<ul>
+<li><b>Asymmetric / retrieval</b> (nomic-embed-text): "does this <em>document</em> answer this <em>query</em>?" — query and document are different shapes of text.</li>
+<li><b>Symmetric / similarity</b> (all-minilm): "are these two <em>questions</em> the same?" — both sides are the same shape.</li>
+</ul>
+Using a retrieval model for question↔question matching (our first cache) gave a <b>tiny separation margin</b>
+(~0.09 between paraphrases and different questions) → "what is a dispute?" wrongly matched the deadline answer.
+Switching the cache to a symmetric model (all-minilm) widened the margin to <b>~0.27</b> and fixed it. Pick the
+embedding for the <em>job</em>, not just "an embedding model."</div>
+
+<!-- ============================================================= -->
+<h2 id="temp">4 · Temperature, Sampling &amp; Randomness</h2>
+
+<p>Why does the same question give different answers each time? Because the model doesn't output a single "the next
+token." It outputs a <b>probability distribution over all ~50k tokens</b>, then <em>samples</em> from it. The knobs
+that control that sampling are the source of the "randomness" you see.</p>
+
+<h4>How the next token is actually chosen</h4>
+<ol>
+<li>The network outputs a raw score (<b>logit</b>) for every token in the vocabulary.</li>
+<li><b>Temperature</b> scales those logits, then <b>softmax</b> turns them into probabilities that sum to 1.</li>
+<li>Optional filters (<b>top-k</b>, <b>top-p</b>) trim the candidate set.</li>
+<li>One token is <b>sampled</b> from the remaining distribution. Repeat for the next token.</li>
+</ol>
+
+<figure><div class="diagram">
+<svg viewBox="0 0 720 250" role="img" aria-label="Temperature reshaping the probability distribution">
+  <!-- low temp -->
+  <text x="130" y="24" fill="#4ade80" font-size="13" text-anchor="middle">temperature ≈ 0.2 (ours)</text>
+  <text x="130" y="42" fill="#9aa5b1" font-size="11" text-anchor="middle">sharp → focused, near-deterministic</text>
+  <g transform="translate(40,60)">
+    <rect x="0" y="20" width="34" height="120" fill="#4ade80"/>
+    <rect x="44" y="90" width="34" height="50" fill="#4ade8088"/>
+    <rect x="88" y="110" width="34" height="30" fill="#4ade8055"/>
+    <rect x="132" y="125" width="34" height="15" fill="#4ade8033"/>
+    <line x1="-6" y1="140" x2="180" y2="140" stroke="#2a3140"/>
+    <text x="17" y="155" fill="#9aa5b1" font-size="10" text-anchor="middle">120 days</text>
+    <text x="61" y="155" fill="#9aa5b1" font-size="10" text-anchor="middle">90</text>
+    <text x="105" y="155" fill="#9aa5b1" font-size="10" text-anchor="middle">60</text>
+    <text x="149" y="155" fill="#9aa5b1" font-size="10" text-anchor="middle">…</text>
+  </g>
+  <!-- high temp -->
+  <text x="530" y="24" fill="#fbbf24" font-size="13" text-anchor="middle">temperature ≈ 1.2</text>
+  <text x="530" y="42" fill="#9aa5b1" font-size="11" text-anchor="middle">flat → creative, more random</text>
+  <g transform="translate(440,60)">
+    <rect x="0" y="70" width="34" height="70" fill="#fbbf24"/>
+    <rect x="44" y="85" width="34" height="55" fill="#fbbf2499"/>
+    <rect x="88" y="95" width="34" height="45" fill="#fbbf2477"/>
+    <rect x="132" y="105" width="34" height="35" fill="#fbbf2455"/>
+    <line x1="-6" y1="140" x2="180" y2="140" stroke="#2a3140"/>
+    <text x="17" y="155" fill="#9aa5b1" font-size="10" text-anchor="middle">120 days</text>
+    <text x="61" y="155" fill="#9aa5b1" font-size="10" text-anchor="middle">90</text>
+    <text x="105" y="155" fill="#9aa5b1" font-size="10" text-anchor="middle">60</text>
+    <text x="149" y="155" fill="#9aa5b1" font-size="10" text-anchor="middle">…</text>
+  </g>
+  <text x="360" y="220" fill="#9aa5b1" font-size="12" text-anchor="middle">Same logits, reshaped. Low temp concentrates probability on the top token; high temp spreads it out.</text>
+</svg></div>
+<figcaption>Temperature = how "peaked" the distribution is before sampling. Formula: <span class="mono">softmax(logits / temperature)</span>.</figcaption></figure>
+
+<h4>The knobs, precisely</h4>
+<table>
+<tr><th>Knob</th><th>What it does</th><th>Effect</th></tr>
+<tr><td><b>temperature</b></td><td>Divides logits before softmax. <span class="mono">→0</span> sharpens (greedy), <span class="mono">↑</span> flattens.</td><td>Low = consistent/factual. High = varied/creative. We use <b>0.2</b> for banking (want consistency).</td></tr>
+<tr><td><b>top-k</b></td><td>Keep only the k highest-probability tokens, sample among them.</td><td>Hard cap on candidates. k=1 = greedy/deterministic.</td></tr>
+<tr><td><b>top-p (nucleus)</b></td><td>Keep the smallest set of tokens whose probabilities sum to p (e.g., 0.9).</td><td>Adaptive: few candidates when confident, more when uncertain.</td></tr>
+<tr><td><b>repetition/frequency penalty</b></td><td>Lowers probability of already-used tokens.</td><td>Reduces loops and repeated phrases.</td></tr>
+<tr><td><b>seed</b></td><td>Fixes the random number generator.</td><td>Same seed + same input + temp&gt;0 → reproducible sampling.</td></tr>
+</table>
+
+<div class="card tip"><div class="lead">Why we chose temperature 0.2</div>
+A banking copilot must be <b>consistent and factual</b>, not creative. Low temperature keeps the model on the highest-probability
+(most grounded) tokens, reducing the chance it "wanders" off the retrieved policy text. It does <b>not</b> make the model
+"correct" — that's what RAG grounding and guardrails are for — it just makes it <b>steadier</b>. You cannot reach 0 with
+most APIs (fully greedy), and you wouldn't want to: a hair of randomness helps it recover from awkward phrasings.</div>
+
+<div class="card warn"><div class="lead">Temperature is NOT a correctness knob</div>
+Lowering temperature reduces <em>variance</em>, not <em>hallucination</em>. A confidently wrong model at temp 0 is
+still confidently wrong. Correctness comes from <b>grounding</b> (RAG), <b>enforcement</b> (guardrails/tools), and
+<b>evals</b> — never from the temperature dial alone. This is the single most common misconception.</div>
+
+<!-- ============================================================= -->
+<h2 id="rag">5 · RAG — Retrieval-Augmented Generation</h2>
+
+<p>An LLM only knows what was in its training data (frozen at a cutoff) and what you put in the prompt. It does
+<b>not</b> know your bank's policies. <b>RAG</b> solves this: before answering, we <em>retrieve</em> the most relevant
+snippets from your documents and <em>augment</em> the prompt with them, so the model answers <em>from your data</em>
+with citations — instead of from its memory (which would hallucinate).</p>
+
+<p>RAG has two phases: <b>ingestion</b> (offline, build the searchable index) and <b>retrieval</b> (per query, find and inject the right chunks).</p>
+
+<figure><div class="diagram">
+<svg viewBox="0 0 720 470" role="img" aria-label="RAG pipeline">
+  <text x="360" y="22" fill="#fff" font-size="15" text-anchor="middle" font-weight="bold">INGESTION (offline, once per doc update)</text>
+  <g font-size="12">
+  <rect x="20" y="40" width="120" height="46" rx="8" fill="#161b22" stroke="#2a3140"/><text x="80" y="60" fill="#e6edf3" text-anchor="middle">Policy .md</text><text x="80" y="76" fill="#9aa5b1" text-anchor="middle">documents</text>
+  <rect x="170" y="40" width="120" height="46" rx="8" fill="#161b22" stroke="#2a3140"/><text x="230" y="60" fill="#e6edf3" text-anchor="middle">Split into</text><text x="230" y="76" fill="#9aa5b1" text-anchor="middle">chunks + metadata</text>
+  <rect x="320" y="40" width="120" height="46" rx="8" fill="#161b22" stroke="#2a3140"/><text x="380" y="60" fill="#e6edf3" text-anchor="middle">Embed each</text><text x="380" y="76" fill="#9aa5b1" text-anchor="middle">chunk → vector</text>
+  <rect x="470" y="40" width="140" height="46" rx="8" fill="#1c2230" stroke="#4ade8055"/><text x="540" y="60" fill="#4ade80" text-anchor="middle">pgvector store</text><text x="540" y="76" fill="#9aa5b1" text-anchor="middle">vector + tenantId</text>
+  <path d="M140 63 h30" stroke="#4ade80" marker-end="url(#ar)"/><path d="M290 63 h30" stroke="#4ade80" marker-end="url(#ar)"/><path d="M440 63 h30" stroke="#4ade80" marker-end="url(#ar)"/>
+  </g>
+  <line x1="20" y1="120" x2="700" y2="120" stroke="#2a3140" stroke-dasharray="4"/>
+  <text x="360" y="150" fill="#fff" font-size="15" text-anchor="middle" font-weight="bold">RETRIEVAL (per user question)</text>
+  <g font-size="12">
+  <rect x="40" y="175" width="130" height="46" rx="8" fill="#161b22" stroke="#f472b6"/><text x="105" y="195" fill="#f472b6" text-anchor="middle">User question</text><text x="105" y="211" fill="#9aa5b1" text-anchor="middle">"dispute deadline?"</text>
+  <rect x="40" y="245" width="130" height="46" rx="8" fill="#161b22" stroke="#2a3140"/><text x="105" y="265" fill="#e6edf3" text-anchor="middle">Rewrite query</text><text x="105" y="281" fill="#9aa5b1" text-anchor="middle">(modular RAG)</text>
+  <rect x="40" y="315" width="130" height="46" rx="8" fill="#161b22" stroke="#2a3140"/><text x="105" y="335" fill="#e6edf3" text-anchor="middle">Embed query</text><text x="105" y="351" fill="#9aa5b1" text-anchor="middle">→ vector</text>
+  <rect x="220" y="245" width="150" height="60" rx="8" fill="#1c2230" stroke="#60a5fa"/><text x="295" y="268" fill="#60a5fa" text-anchor="middle">ANN search + filter</text><text x="295" y="285" fill="#9aa5b1" text-anchor="middle">HNSW, cosine,</text><text x="295" y="299" fill="#9aa5b1" text-anchor="middle">tenantId = me</text>
+  <rect x="420" y="245" width="130" height="60" rx="8" fill="#161b22" stroke="#2a3140"/><text x="485" y="268" fill="#e6edf3" text-anchor="middle">Top-k chunks</text><text x="485" y="285" fill="#9aa5b1" text-anchor="middle">most relevant</text><text x="485" y="299" fill="#9aa5b1" text-anchor="middle">policy text</text>
+  <rect x="590" y="245" width="110" height="60" rx="8" fill="#1c2230" stroke="#4ade8055"/><text x="645" y="270" fill="#4ade80" text-anchor="middle">LLM</text><text x="645" y="288" fill="#9aa5b1" text-anchor="middle">answer +</text><text x="645" y="301" fill="#9aa5b1" text-anchor="middle">citation</text>
+  <path d="M105 221 v24" stroke="#f472b6" marker-end="url(#ar)"/>
+  <path d="M105 291 v24" stroke="#60a5fa" marker-end="url(#ar)"/>
+  <path d="M170 300 h50 l0 -25" stroke="#60a5fa" fill="none" marker-end="url(#ar)"/>
+  <path d="M370 275 h50" stroke="#60a5fa" marker-end="url(#ar)"/>
+  <path d="M550 275 h40" stroke="#4ade80" marker-end="url(#ar)"/>
+  </g>
+  <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="#7d8590"/></marker></defs>
+</svg></div>
+<figcaption>The full RAG pipeline. Ingestion builds the index once; retrieval runs on every question.</figcaption></figure>
+
+<h4>Ingestion, step by step (what our IngestionService does)</h4>
+<ol>
+<li><b>Load</b> the tenant's Markdown policy docs.</li>
+<li><b>Chunk / split</b>: break long docs into passages small enough to embed and to fit the context window. We use a
+<code>TokenTextSplitter</code>. <b>Chunking is an art</b>: too big = imprecise retrieval (irrelevant text dilutes the match);
+too small = lost context (an answer spans two chunks). Overlap between chunks preserves continuity.</li>
+<li><b>Stamp metadata</b> on every chunk — critically <code>tenantId</code>, plus <code>docType</code>, <code>source</code>.
+This metadata is the <b>load-bearing security control</b>: retrieval filters on it so one tenant can never see another's docs.</li>
+<li><b>Embed</b> each chunk → a 768-dim vector.</li>
+<li><b>Store</b> vector + text + metadata in pgvector.</li>
+</ol>
+
+<div class="snippet"><div class="cap">IngestionService.java — chunk, stamp tenant, store</div>
+<pre>List&lt;Document&gt; docs = <span class="k">new</span> <span class="f">MarkdownDocumentReader</span>(resource, config).<span class="f">get</span>();
+List&lt;Document&gt; split = splitter.<span class="f">apply</span>(docs);          <span class="c">// chunk</span>
+<span class="k">for</span> (Document d : split) {
+    d.<span class="f">getMetadata</span>().<span class="f">putIfAbsent</span>(<span class="s">"tenantId"</span>, tenantId);   <span class="c">// security stamp</span>
+    d.<span class="f">getMetadata</span>().<span class="f">putIfAbsent</span>(<span class="s">"docType"</span>, docType);
+}
+vectorStore.<span class="f">add</span>(split);   <span class="c">// embeds + persists to pgvector</span></pre></div>
+
+<div class="card tip"><div class="lead">Idempotent ingestion &amp; cache invalidation</div>
+Re-running ingestion <b>clears prior chunks first</b> (so duplicates don't skew ranking) and <b>flushes the semantic cache</b>
+(so no stale answer survives a policy update). Duplicate chunks were a real bug — they doubled a document's "weight" in
+retrieval and skewed which chunk won.</div>
+
+<!-- ============================================================= -->
+<h2 id="ann">6 · ANN, HNSW &amp; Vector Search</h2>
+
+<p>Retrieval's core question: given the query vector, find the <b>nearest</b> chunk vectors out of potentially millions.
+The exact answer requires comparing against <em>every</em> vector — <b>brute-force k-NN</b> — which is O(N) per query and
+too slow at scale. So we use <b>ANN (Approximate Nearest Neighbor)</b> search: trade a tiny bit of accuracy for
+<em>massive</em> speed (milliseconds instead of seconds).</p>
+
+<h4>HNSW — Hierarchical Navigable Small World graphs</h4>
+<p>The most popular ANN index (and what pgvector uses). Think of it as a <b>multi-layer graph</b>, like a skip-list for
+vectors:</p>
+<ul>
+<li>Each vector is a <b>node</b> connected to its nearest neighbors.</li>
+<li>There are <b>layers</b>: the top layer is sparse (few nodes, long-range links); lower layers get denser.</li>
+<li>Search <b>starts at the top</b>, greedily hops toward the query through long-range links to land in roughly the right
+neighborhood, then <b>descends</b> into denser layers to refine — arriving near the true nearest neighbors after visiting
+only a handful of nodes instead of all N.</li>
+</ul>
+
+<figure><div class="diagram">
+<svg viewBox="0 0 720 300" role="img" aria-label="HNSW multi-layer graph search">
+  <!-- layer 2 -->
+  <text x="20" y="45" fill="#9aa5b1" font-size="12">Layer 2 (sparse)</text>
+  <circle cx="180" cy="45" r="7" fill="#60a5fa"/><circle cx="520" cy="45" r="7" fill="#60a5fa"/>
+  <line x1="180" y1="45" x2="520" y2="45" stroke="#60a5fa55"/>
+  <!-- layer 1 -->
+  <text x="20" y="140" fill="#9aa5b1" font-size="12">Layer 1</text>
+  <circle cx="180" cy="140" r="6" fill="#4ade80"/><circle cx="300" cy="150" r="6" fill="#4ade80"/>
+  <circle cx="420" cy="130" r="6" fill="#4ade80"/><circle cx="520" cy="140" r="6" fill="#4ade80"/>
+  <line x1="180" y1="140" x2="300" y2="150" stroke="#4ade8055"/><line x1="300" y1="150" x2="420" y2="130" stroke="#4ade8055"/><line x1="420" y1="130" x2="520" y2="140" stroke="#4ade8055"/>
+  <!-- layer 0 dense -->
+  <text x="20" y="245" fill="#9aa5b1" font-size="12">Layer 0 (dense, all nodes)</text>
+  <g fill="#7d8590">
+  <circle cx="150" cy="245" r="5"/><circle cx="210" cy="255" r="5"/><circle cx="270" cy="240" r="5"/>
+  <circle cx="330" cy="255" r="5"/><circle cx="390" cy="248" r="5"/><circle cx="450" cy="258" r="5"/>
+  <circle cx="500" cy="242" r="5"/><circle cx="560" cy="252" r="5"/><circle cx="600" cy="245" r="5"/>
+  </g>
+  <circle cx="330" cy="255" r="8" fill="none" stroke="#f472b6" stroke-width="2"/>
+  <text x="330" y="285" fill="#f472b6" font-size="11" text-anchor="middle">nearest found</text>
+  <!-- entry + descent path -->
+  <line x1="180" y1="52" x2="180" y2="133" stroke="#fbbf24" stroke-dasharray="3"/>
+  <line x1="180" y1="147" x2="300" y2="150" stroke="#fbbf24" stroke-width="2" marker-end="url(#ar2)"/>
+  <line x1="300" y1="157" x2="330" y2="247" stroke="#fbbf24" stroke-width="2" stroke-dasharray="3" marker-end="url(#ar2)"/>
+  <text x="120" y="30" fill="#fbbf24" font-size="11">entry point ↓</text>
+  <defs><marker id="ar2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="#fbbf24"/></marker></defs>
+</svg></div>
+<figcaption>HNSW: enter at the sparse top, greedily hop to the right region, descend into denser layers to refine. Visits ~log(N) nodes, not N.</figcaption></figure>
+
+<h4>The tuning knobs (recall vs speed)</h4>
+<table>
+<tr><th>Parameter</th><th>Meaning</th><th>Trade-off</th></tr>
+<tr><td><b>M</b></td><td>Max neighbor links per node.</td><td>Higher = better recall, more memory &amp; slower build.</td></tr>
+<tr><td><b>ef_construction</b></td><td>Candidate list size while building the index.</td><td>Higher = better graph quality, slower ingestion.</td></tr>
+<tr><td><b>ef_search</b></td><td>Candidate list size at query time.</td><td>Higher = better recall, slower query. The main runtime dial.</td></tr>
+</table>
+
+<div class="card info"><div class="lead">Our config &amp; the honest scale caveat</div>
+We set <code>index-type: hnsw</code>, <code>distance-type: cosine_distance</code>. But our corpus is <b>10 chunks</b> —
+at that size HNSW is configured but <em>functionally irrelevant</em> (brute-forcing 10 vectors is instant). HNSW earns
+its keep at ~100k+ vectors. Knowing <em>when</em> a technique matters is as important as knowing how it works.</div>
+
+<!-- ============================================================= -->
+<h2 id="hybrid">7 · Hybrid Search — BM25 &amp; RRF</h2>
+
+<p>Dense vector search is great at <b>meaning</b> ("minimum balance" ≈ "least I must keep") but weak at <b>exact tokens</b>
+— codes and identifiers like "IFSC code" or "Form 15G" carry little semantic signal even though they're the literal
+answer. The fix: run a <b>second, lexical search in parallel</b> and merge the results. This is <b>hybrid search</b>.</p>
+
+<h4>BM25 — the lexical half</h4>
+<p><b>BM25</b> is a classic keyword-ranking function (the algorithm behind search engines before embeddings). It scores a
+document by <b>term frequency</b> (how often the query words appear) weighted by <b>inverse document frequency</b> (rare
+words count more) with saturation (the 10th occurrence of a word adds less than the 1st) and length normalization. It's
+<b>sparse</b> — it matches literal tokens — which is exactly where dense search is blind.</p>
+
+<table>
+<tr><th></th><th>Dense (vector)</th><th>Sparse (BM25)</th></tr>
+<tr><td>Matches</td><td>Meaning / paraphrase</td><td>Exact words / codes</td></tr>
+<tr><td>"least balance to keep"</td><td>✅ finds "minimum balance"</td><td>❌ different words</td></tr>
+<tr><td>"Form 15G"</td><td>❌ weak signal</td><td>✅ exact match</td></tr>
+</table>
+
+<h4>RRF — Reciprocal Rank Fusion (merging the two lists)</h4>
+<p>Dense and BM25 return two <em>separately</em> ranked lists with scores on different scales. <b>RRF</b> merges them
+without needing comparable scores: each document gets a score of <span class="mono">Σ 1/(k + rank)</span> across the lists
+(k≈60). A doc ranked high in <em>either</em> list floats up; a doc ranked well in <em>both</em> wins. Simple, scale-free, effective.</p>
+
+<div class="card warn"><div class="lead">Status in AegisAI: NOT implemented (deliberately)</div>
+We do pure dense search — no BM25, no RRF. At 10 chunks there's nothing to disambiguate, so hybrid search would add
+latency for zero accuracy gain (our eval is already 100%). It becomes <b>required</b> when the corpus grows past a few
+thousand chunks <em>or</em> users query exact tokens. Rule: <b>let the eval tell you</b> — add retrieval complexity when a
+measured accuracy number regresses, not speculatively.</div>
+
+<!-- ============================================================= -->
+<h2 id="rerank">8 · Re-ranking &amp; Cross-Encoders</h2>
+
+<p>First-pass search (ANN + BM25) is tuned for <b>speed across millions</b> of chunks, so it's deliberately approximate —
+it returns maybe the top 50 candidates, not the perfect top 3. A <b>re-ranker</b> then re-scores those 50 much more
+precisely and returns a trustworthy top 3–5.</p>
+
+<h4>Bi-encoder vs cross-encoder — the key distinction</h4>
+<div class="grid2">
+<div class="card info"><div class="lead">Bi-encoder (what ANN uses)</div>
+Encodes the query and each document <b>separately</b> into vectors, <em>then</em> compares (cosine). Because document
+vectors are <b>pre-computed once</b> at ingestion, search over millions is fast. But the query and document never "see"
+each other during encoding → less precise.</div>
+<div class="card key"><div class="lead">Cross-encoder (the re-ranker)</div>
+Feeds the query and one candidate <b>together</b> through the model in a single pass, so it can attend to their
+interaction → much more accurate relevance score. But it <b>can't be pre-computed</b> (it needs the query), so it's too
+slow to run on millions — only on the ~50 shortlisted candidates.</div>
+</div>
+
+<figure><div class="diagram">
+<svg viewBox="0 0 720 200" role="img" aria-label="Retrieve then rerank funnel">
+  <rect x="20" y="70" width="150" height="60" rx="8" fill="#1c2230" stroke="#60a5fa"/><text x="95" y="95" fill="#60a5fa" text-anchor="middle" font-size="12">ANN + BM25</text><text x="95" y="113" fill="#9aa5b1" text-anchor="middle" font-size="11">millions → top 50</text>
+  <rect x="260" y="70" width="150" height="60" rx="8" fill="#1c2230" stroke="#f472b6"/><text x="335" y="90" fill="#f472b6" text-anchor="middle" font-size="12">Cross-encoder</text><text x="335" y="107" fill="#9aa5b1" text-anchor="middle" font-size="11">re-rank the 50,</text><text x="335" y="121" fill="#9aa5b1" text-anchor="middle" font-size="11">precise scoring</text>
+  <rect x="500" y="70" width="150" height="60" rx="8" fill="#1c2230" stroke="#4ade80"/><text x="575" y="95" fill="#4ade80" text-anchor="middle" font-size="12">Top 3–5</text><text x="575" y="113" fill="#9aa5b1" text-anchor="middle" font-size="11">→ into the prompt</text>
+  <path d="M170 100 h90" stroke="#7d8590" marker-end="url(#ar3)"/><path d="M410 100 h90" stroke="#7d8590" marker-end="url(#ar3)"/>
+  <text x="360" y="40" fill="#9aa5b1" font-size="12" text-anchor="middle">fast + approximate  →  slow + accurate (but only on 50)</text>
+  <defs><marker id="ar3" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="#7d8590"/></marker></defs>
+</svg></div>
+<figcaption>The two-stage funnel: cheap recall over everything, then expensive precision over a shortlist.</figcaption></figure>
+
+<p><b>Latency budget:</b> dense ~10–50ms, sparse runs in parallel (≈free on top), cross-encoder ~50–150ms for 50 candidates
+— the expensive part, because it can't be pre-computed. <b>Status in AegisAI: not implemented</b> (same reasoning as hybrid — corpus too small to benefit).</p>
+
+<!-- ============================================================= -->
+<h2 id="tools">9 · Agents &amp; Tool Calling</h2>
+
+<p>RAG answers questions <em>from documents</em>. But a copilot must also <em>do things</em>: look up a balance, list
+transactions, open a dispute. That's <b>tool calling</b> (a.k.a. function calling). You describe your functions to the
+model as schemas; the model, mid-generation, can emit a structured "call this function with these arguments"; your code
+runs it and feeds the result back; the model continues with the real data.</p>
+
+<figure><div class="diagram">
+<svg viewBox="0 0 720 250" role="img" aria-label="Tool calling loop">
+  <rect x="30" y="30" width="150" height="44" rx="8" fill="#161b22" stroke="#2a3140"/><text x="105" y="57" fill="#e6edf3" text-anchor="middle" font-size="12">User: "balance of ACC-1001?"</text>
+  <rect x="280" y="30" width="150" height="44" rx="8" fill="#1c2230" stroke="#4ade80"/><text x="355" y="52" fill="#4ade80" text-anchor="middle" font-size="12">LLM decides:</text><text x="355" y="68" fill="#9aa5b1" text-anchor="middle" font-size="11">call lookupBalance()</text>
+  <rect x="530" y="30" width="160" height="44" rx="8" fill="#161b22" stroke="#f472b6"/><text x="610" y="52" fill="#f472b6" text-anchor="middle" font-size="12">Your code runs tool</text><text x="610" y="68" fill="#9aa5b1" text-anchor="middle" font-size="11">+ authz + tenant check</text>
+  <rect x="530" y="140" width="160" height="44" rx="8" fill="#161b22" stroke="#2a3140"/><text x="610" y="162" fill="#e6edf3" text-anchor="middle" font-size="12">DB / service</text><text x="610" y="178" fill="#9aa5b1" text-anchor="middle" font-size="11">returns $1,499.98</text>
+  <rect x="280" y="140" width="150" height="44" rx="8" fill="#1c2230" stroke="#4ade80"/><text x="355" y="162" fill="#4ade80" text-anchor="middle" font-size="12">LLM composes</text><text x="355" y="178" fill="#9aa5b1" text-anchor="middle" font-size="11">natural answer</text>
+  <rect x="30" y="140" width="150" height="44" rx="8" fill="#161b22" stroke="#2a3140"/><text x="105" y="167" fill="#e6edf3" text-anchor="middle" font-size="12">"Balance is $1,499.98"</text>
+  <path d="M180 52 h100" stroke="#7d8590" marker-end="url(#ar4)"/>
+  <path d="M430 52 h100" stroke="#7d8590" marker-end="url(#ar4)"/>
+  <path d="M610 74 v66" stroke="#7d8590" marker-end="url(#ar4)"/>
+  <path d="M530 162 h-100" stroke="#7d8590" marker-end="url(#ar4)"/>
+  <path d="M280 162 h-100" stroke="#7d8590" marker-end="url(#ar4)"/>
+  <defs><marker id="ar4" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="#7d8590"/></marker></defs>
+</svg></div>
+<figcaption>The tool-calling loop. The model orchestrates; <b>your code</b> holds authority over what actually happens.</figcaption></figure>
+
+<div class="card key"><div class="lead">The security thesis: the model requests, code enforces</div>
+The model can <b>request</b> anything — but the tool <b>decides</b>. In AegisAI, every tool: (1) reads the caller's
+identity from <code>ToolContext</code> (the model never sees or sets it), (2) checks permission <em>inside</em> the tool,
+(3) enforces tenant isolation. "Excessive agency" (OWASP LLM06) is <b>structurally impossible</b>: the model can ask to
+move money, but the tool only ever creates a <em>human-approval request</em>. Authority lives in code, never in the prompt.</div>
+
+<div class="snippet"><div class="cap">BankingTools.java — identity &amp; authz enforced inside the tool</div>
+<pre><span class="f">@Tool</span>(description=<span class="s">"Look up an account's current balance by account id"</span>)
+<span class="k">public</span> String <span class="f">lookupBalance</span>(<span class="f">@ToolParam</span> String accountId, ToolContext ctx){
+  Principal p = <span class="f">principal</span>(ctx);           <span class="c">// identity from context, NOT from the model</span>
+  <span class="f">require</span>(p, <span class="s">"account:read"</span>);          <span class="c">// authz check in code</span>
+  var acct = banking.<span class="f">getAccount</span>(accountId);
+  <span class="k">if</span>(!acct.<span class="f">tenantId</span>().<span class="f">equals</span>(p.<span class="f">tenantId</span>()))
+      <span class="k">throw new</span> <span class="f">AccessDeniedException</span>(<span class="s">"Cross-tenant access denied"</span>);  <span class="c">// tenant isolation</span>
+  <span class="k">return</span> <span class="s">"Account "</span>+accountId+<span class="s">" balance: $"</span>+acct.<span class="f">balance</span>();
+}</pre></div>
+
+<p><b>Human-in-the-loop (HITL):</b> for money movement we never execute — <code>issueProvisionalCredit</code> creates a
+<code>PENDING_HUMAN_APPROVAL</code> request. The agent proposes; a human disposes.</p>
+
+<!-- ============================================================= -->
+<h2 id="cache">10 · Semantic Caching</h2>
+
+<p>LLM calls cost seconds and money. But users ask the <em>same</em> question in different words. A <b>semantic cache</b>
+serves a previously-computed answer when a new question is <em>semantically</em> equivalent to a past one — turning a
+3-second LLM call into a ~15ms lookup. It's a cache keyed by <em>meaning</em>, not exact string.</p>
+
+<figure><div class="diagram">
+<svg viewBox="0 0 720 210" role="img" aria-label="Semantic cache flow">
+  <rect x="20" y="80" width="120" height="46" rx="8" fill="#161b22" stroke="#f472b6"/><text x="80" y="100" fill="#f472b6" text-anchor="middle" font-size="12">Question</text><text x="80" y="116" fill="#9aa5b1" text-anchor="middle" font-size="11">embed it</text>
+  <rect x="180" y="80" width="150" height="46" rx="8" fill="#161b22" stroke="#2a3140"/><text x="255" y="100" fill="#e6edf3" text-anchor="middle" font-size="12">Cosine vs cached</text><text x="255" y="116" fill="#9aa5b1" text-anchor="middle" font-size="11">questions (per tenant)</text>
+  <path d="M330 90 l90 -35" stroke="#4ade80" marker-end="url(#ar5)"/><path d="M330 116 l90 35" stroke="#fbbf24" marker-end="url(#ar5)"/>
+  <rect x="430" y="20" width="160" height="46" rx="8" fill="#1c2230" stroke="#4ade80"/><text x="510" y="40" fill="#4ade80" text-anchor="middle" font-size="12">sim ≥ 0.62 → HIT</text><text x="510" y="56" fill="#9aa5b1" text-anchor="middle" font-size="11">return cached, ~15ms</text>
+  <rect x="430" y="140" width="160" height="46" rx="8" fill="#1c2230" stroke="#fbbf24"/><text x="510" y="160" fill="#fbbf24" text-anchor="middle" font-size="12">sim &lt; 0.62 → MISS</text><text x="510" y="176" fill="#9aa5b1" text-anchor="middle" font-size="11">call LLM, then store</text>
+  <path d="M140 103 h40" stroke="#7d8590" marker-end="url(#ar5)"/>
+  <defs><marker id="ar5" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="#7d8590"/></marker></defs>
+</svg></div>
+<figcaption>Embed the question, cosine-compare against this tenant's past questions, serve on a close match.</figcaption></figure>
+
+<h4>The hard-won lessons baked into our cache</h4>
+<table>
+<tr><th>Problem</th><th>Fix in code</th></tr>
+<tr><td>Retrieval embedding gave a thin margin (§3) → wrong answers</td><td>Dedicated <b>symmetric</b> model (all-minilm); threshold <b>0.62</b> sits in the wide gap (paraphrases ≥0.74, different ≤0.47)</td></tr>
+<tr><td>"yes"/"ok"/"3rd one" cached &amp; replayed to unrelated turns (poisoning)</td><td><code>isCacheable()</code> rejects context-dependent &amp; short inputs</td></tr>
+<tr><td>A failed "couldn't find…" answer got cached &amp; replayed</td><td><code>isSafeToCache()</code> excludes refusals/negatives</td></tr>
+<tr><td>Account/balance answers (per-user, change over time) cached</td><td>A <code>dynamic</code> flag trips when any account tool runs → never cached</td></tr>
+<tr><td>Stale answers after a policy change</td><td>Cache cleared on every re-ingest; 30-min TTL</td></tr>
+<tr><td>Cross-tenant leakage</td><td>Cache is <b>per-tenant</b>; one tenant's answer can never reach another</td></tr>
+</table>
+
+<div class="snippet"><div class="cap">SemanticCache.java — only cache standalone questions</div>
+<pre><span class="k">public boolean</span> <span class="f">isCacheable</span>(String q){
+  String norm = q.<span class="f">trim</span>().<span class="f">toLowerCase</span>();
+  <span class="k">if</span>(CONTEXT_DEPENDENT.<span class="f">contains</span>(norm)) <span class="k">return false</span>;  <span class="c">// "yes","ok","why",pronouns…</span>
+  <span class="k">if</span>(norm.<span class="f">split</span>(<span class="s">"\\s+"</span>).length &lt; MIN_WORDS) <span class="k">return false</span>; <span class="c">// too short to stand alone</span>
+  <span class="k">return</span> QUESTION_WORDS.<span class="f">matcher</span>(norm).<span class="f">find</span>();        <span class="c">// looks like a real question</span>
+}</pre></div>
+
+<!-- ============================================================= -->
+<h2 id="guard">11 · Guardrails &amp; Security</h2>
+
+<p>An LLM app has a threat surface no traditional app has. The industry reference is the <b>OWASP Top 10 for LLM
+Applications</b>. AegisAI maps each risk to a concrete, <em>code-level</em> control — never a prompt plea.</p>
+
+<table>
+<tr><th>OWASP LLM risk</th><th>Control in AegisAI</th></tr>
+<tr><td>LLM01 Prompt Injection</td><td><code>InjectionScreen</code> flags override/exfiltration attempts before the call</td></tr>
+<tr><td>LLM02 Sensitive Info Disclosure</td><td><code>PiiRedactor</code> masks PAN/SSN/IBAN/email on input <b>and</b> output</td></tr>
+<tr><td>LLM05 Improper Output Handling</td><td>Leaked tool-call JSON detected &amp; suppressed before it reaches the user</td></tr>
+<tr><td>LLM06 Excessive Agency</td><td>Authz inside tools; money movement → human approval only</td></tr>
+<tr><td>LLM08 Scope / domain abuse</td><td><code>ScopeGate</code> classifier blocks off-domain requests</td></tr>
+<tr><td>LLM10 Unbounded Consumption</td><td>Rate limiter + budget guard + circuit breaker</td></tr>
+</table>
+
+<h4>The advisor chain — a filter chain for LLM calls</h4>
+<p>Spring AI <b>advisors</b> wrap every model call like servlet filters wrap HTTP. Ours run in order: audit → guardrails
+(rate limit → budget → injection screen → PII-in → [model] → output moderation) → memory. Enforcement lives here, in
+code, so it can't be prompted away.</p>
+
+<figure><div class="diagram">
+<svg viewBox="0 0 720 130" role="img" aria-label="Advisor chain">
+  <g font-size="11" text-anchor="middle">
+  <rect x="10" y="45" width="90" height="40" rx="7" fill="#161b22" stroke="#2a3140"/><text x="55" y="69" fill="#e6edf3">Audit</text>
+  <rect x="112" y="45" width="90" height="40" rx="7" fill="#161b22" stroke="#fbbf24"/><text x="157" y="63" fill="#fbbf24">Rate limit</text><text x="157" y="77" fill="#9aa5b1">+ budget</text>
+  <rect x="214" y="45" width="90" height="40" rx="7" fill="#161b22" stroke="#fbbf24"/><text x="259" y="63" fill="#fbbf24">Injection</text><text x="259" y="77" fill="#9aa5b1">+ PII in</text>
+  <rect x="316" y="45" width="90" height="40" rx="7" fill="#1c2230" stroke="#4ade80"/><text x="361" y="69" fill="#4ade80">MODEL</text>
+  <rect x="418" y="45" width="100" height="40" rx="7" fill="#161b22" stroke="#fbbf24"/><text x="468" y="63" fill="#fbbf24">Output mod:</text><text x="468" y="77" fill="#9aa5b1">PII/leak</text>
+  <rect x="530" y="45" width="90" height="40" rx="7" fill="#161b22" stroke="#2a3140"/><text x="575" y="69" fill="#e6edf3">Memory</text>
+  <rect x="632" y="45" width="78" height="40" rx="7" fill="#161b22" stroke="#f472b6"/><text x="671" y="69" fill="#f472b6">Reply</text>
+  </g>
+  <g stroke="#7d8590"><path d="M100 65 h12" marker-end="url(#ar6)"/><path d="M202 65 h12" marker-end="url(#ar6)"/><path d="M304 65 h12" marker-end="url(#ar6)"/><path d="M406 65 h12" marker-end="url(#ar6)"/><path d="M518 65 h12" marker-end="url(#ar6)"/><path d="M620 65 h12" marker-end="url(#ar6)"/></g>
+  <defs><marker id="ar6" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="#7d8590"/></marker></defs>
+</svg></div>
+<figcaption>Every call passes through the chain. A guardrail can short-circuit (refuse) before the model, or sanitize after it.</figcaption></figure>
+
+<h4>The scope gate — code enforcement, model judgment</h4>
+<p>A prompt saying "only answer banking questions" is a <em>request</em> the model can ignore (qwen still wrote Python
+when told not to). The <code>ScopeGate</code> is <b>enforcement</b>: it runs the model as a cheap classifier
+(<span class="mono">IN_SCOPE / OUT_OF_SCOPE</span>) <em>before</em> the main call and short-circuits off-domain requests in
+<em>code</em>. Crucially it classifies <b>with the recent conversation</b>, so a follow-up like "the 3rd one" is judged in
+context — no brittle keyword list. Verdicts for standalone questions are cached (330ms → 6ms on repeat).</p>
+
+<div class="card key"><div class="lead">The authentication keystone</div>
+All of the above rests on <b>identity being real</b>. AegisAI uses <b>JWT</b>: a signed token carrying userId, tenantId,
+role. A <code>JwtAuthFilter</code> verifies the signature on every request and populates the security context. Tenant
+isolation, tool authz, and per-tenant budgets are only trustworthy because identity is a <b>verified signed claim</b>, not
+a spoofable header. Auth is what turns the other controls from theater into guarantees.</div>
+
+<!-- ============================================================= -->
+<h2 id="resil">12 · Resilience — Circuit Breaker &amp; Timeouts</h2>
+
+<p>Ollama <b>serializes</b> generation — one model runs at a time. Under concurrent load, calls queue and slow down.
+Without protection, a slow model pins request threads until the pool is exhausted and the whole app hangs. Two patterns
+prevent this, both in <code>LlmGuard</code> (Resilience4j):</p>
+<ul>
+<li><b>Time limiter</b> — a hard 30s cap that cancels a hung call so no thread waits forever.</li>
+<li><b>Circuit breaker</b> — once ≥50% of the last 20 calls fail or run slow (&gt;25s), it <b>opens</b> and fails new
+calls <em>instantly</em> with "the assistant is busy," shedding load so the model can recover — then half-opens to test
+before closing.</li>
+</ul>
+
+<figure><div class="diagram">
+<svg viewBox="0 0 720 210" role="img" aria-label="Circuit breaker state machine">
+  <circle cx="150" cy="105" r="55" fill="#1c2230" stroke="#4ade80" stroke-width="2"/><text x="150" y="100" fill="#4ade80" text-anchor="middle" font-size="14">CLOSED</text><text x="150" y="120" fill="#9aa5b1" text-anchor="middle" font-size="11">calls pass</text>
+  <circle cx="565" cy="105" r="55" fill="#1c2230" stroke="#f472b6" stroke-width="2"/><text x="565" y="100" fill="#f472b6" text-anchor="middle" font-size="14">OPEN</text><text x="565" y="120" fill="#9aa5b1" text-anchor="middle" font-size="11">fast-fail</text>
+  <circle cx="357" cy="180" r="48" fill="#1c2230" stroke="#fbbf24" stroke-width="2"/><text x="357" y="178" fill="#fbbf24" text-anchor="middle" font-size="12">HALF_OPEN</text><text x="357" y="194" fill="#9aa5b1" text-anchor="middle" font-size="10">test probes</text>
+  <path d="M205 95 q160 -55 305 0" fill="none" stroke="#f472b6" marker-end="url(#ar7)"/><text x="357" y="35" fill="#f472b6" font-size="11" text-anchor="middle">≥50% fail / slow</text>
+  <path d="M520 150 q-90 40 -160 20" fill="none" stroke="#fbbf24" marker-end="url(#ar7)"/><text x="470" y="185" fill="#fbbf24" font-size="10">after 15s</text>
+  <path d="M312 165 q-100 -30 -155 -75" fill="none" stroke="#4ade80" marker-end="url(#ar7)"/><text x="210" y="150" fill="#4ade80" font-size="10">probes ok</text>
+  <path d="M400 175 q60 -20 110 -55" fill="none" stroke="#f472b6" marker-end="url(#ar7)"/><text x="480" y="150" fill="#f472b6" font-size="10">probe fails</text>
+  <defs><marker id="ar7" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="#7d8590"/></marker></defs>
+</svg></div>
+<figcaption>The circuit breaker state machine — verified live in our stress test: CLOSED→OPEN→HALF_OPEN→…→CLOSED.</figcaption></figure>
+
+<div class="card tip"><div class="lead">What the stress test proved</div>
+Ramping 1→100 concurrent users, the circuit opened at ~25 users (the single-Ollama saturation point), shed load, and
+<b>recovered fully</b> afterward. The app stayed <b>responsive</b> under 100× overload instead of collapsing. Resilience
+buys <em>graceful degradation</em>, not more capacity — capacity needs horizontal model serving (vLLM / replicas / hosted API).</div>
+
+<!-- ============================================================= -->
+<h2 id="stream">13 · Streaming</h2>
+
+<p>Generating a full answer takes seconds; the user stares at a blank screen. <b>Streaming</b> sends tokens as they're
+produced (via <b>Server-Sent Events</b>), so the first words appear in ~500ms instead of a multi-second wait. Same total
+time, far better perceived latency.</p>
+
+<div class="card warn"><div class="lead">The guardrail-safe streaming problem</div>
+Output guardrails (PII redaction, tool-leak suppression) need the <b>complete</b> text — but you <b>can't un-send a
+token</b>. Naively streaming raw tokens would leak a card number before redaction could fire. Our fix: <b>sanitize at safe
+boundaries</b> — buffer tokens until a sentence/newline, run the guardrails on that complete segment, <em>then</em> flush
+it. Sentence boundaries never fall inside a PAN/SSN/IBAN/email, so nothing leaks across the boundary. Input guards
+(rate/budget/injection) run once up front. This is a genuinely subtle production pattern.</div>
+
+<div class="card info"><div class="lead">A real framework bug we caught</div>
+Streaming + tool-calls with Ollama threw <code>NullPointerException: evalDuration is null</code> in Spring AI 1.0.0 —
+the tool ran but the follow-up stream crashed. Fixed by bumping the BOM to <b>1.0.9</b>. Lesson: the Java GenAI ecosystem
+is younger; pin to patched versions and test the streaming+tools path specifically.</div>
+
+<!-- ============================================================= -->
+<h2 id="eval">14 · Observability &amp; Evals</h2>
+
+<p>You can't improve what you don't measure, and LLM output is non-deterministic — so <b>evaluation is the regression
+net</b>. Two distinct things must be measured, and conflating them is a classic mistake:</p>
+<div class="grid2">
+<div class="card info"><div class="lead">Performance (does it stay up?)</div>
+Latency percentiles (p50/p95/p99), throughput, error rate, circuit state, token/cost metrics (Micrometer → Prometheus).
+Answered by the <b>stress test</b>.</div>
+<div class="card key"><div class="lead">Accuracy (is it correct?)</div>
+Does the answer contain the right facts? Answered by a <b>golden-fact eval</b> — known questions with expected values
+(120 days, $5,000…), graded deterministically. A separate concern from performance.</div>
+</div>
+
+<div class="card warn"><div class="lead">The lesson that cost us the most</div>
+"It stayed up under load" and "it gives correct answers" are <b>two different claims</b>. Our stress test measured only
+the first — it discarded the answer text. When we finally built an accuracy eval, it surfaced a real bug (a
+<code>varchar(36)</code> chat-memory column overflowing on realistic identifiers) that no performance metric would ever
+catch. <b>Always eval correctness separately, and wire it into CI</b> so a retrieval or prompt regression fails the build.</div>
+
+<!-- ============================================================= -->
+<h2 id="springai">15 · Spring AI Mechanics</h2>
+
+<p>Spring AI is the Java framework tying this together. The pieces you'll use constantly:</p>
+<table>
+<tr><th>Abstraction</th><th>What it is</th></tr>
+<tr><td><code>ChatClient</code></td><td>The fluent entry point: <code>.prompt().user(…).tools(…).call()</code> or <code>.stream()</code>.</td></tr>
+<tr><td><b>Advisors</b></td><td>Interceptors around each call (audit, guardrails, memory). <code>CallAdvisor</code> for blocking, <code>StreamAdvisor</code> for streaming.</td></tr>
+<tr><td><b>Structured output</b></td><td><code>.entity(MyRecord.class)</code> — the model's JSON is parsed straight into a typed Java record.</td></tr>
+<tr><td><code>@Tool</code> / <code>ToolContext</code></td><td>Expose a method as a callable tool; pass identity out-of-band via context.</td></tr>
+<tr><td><code>VectorStore</code> + advisors</td><td>pgvector-backed retrieval, with <code>RetrievalAugmentationAdvisor</code> and query rewriting.</td></tr>
+<tr><td><code>ChatMemory</code></td><td>Persists conversation turns (JDBC) so follow-ups keep context.</td></tr>
+<tr><td><b>Model portability</b></td><td>Swap Ollama ↔ OpenAI ↔ Anthropic by profile/config — no code change.</td></tr>
+</table>
+
+<div class="snippet"><div class="cap">AssistantController.java — the fluent call with tools, context &amp; advisors</div>
+<pre>String answer = llmGuard.<span class="f">call</span>(() -> assistant.<span class="f">prompt</span>()
+    .<span class="f">user</span>(request.<span class="f">message</span>())
+    .<span class="f">tools</span>(bankingTools, policySearchTool)               <span class="c">// callable functions</span>
+    .<span class="f">toolContext</span>(Map.<span class="f">of</span>(PRINCIPAL_KEY, principal))       <span class="c">// identity, hidden from model</span>
+    .<span class="f">advisors</span>(a -> a.<span class="f">param</span>(CONVERSATION_ID, memoryKey)     <span class="c">// memory scope</span>
+                   .<span class="f">param</span>(TENANT_PARAM, tenantId))          <span class="c">// guardrail scope</span>
+    .<span class="f">call</span>().<span class="f">content</span>());                                <span class="c">// wrapped in circuit breaker</span></pre></div>
+
+<!-- ============================================================= -->
+<h2 id="codewalk">16 · Code Walkthrough — the request lifecycle</h2>
+
+<p>Here's exactly what happens when a user sends a message to <code>/api/assistant/stream</code>, in order:</p>
+<ol>
+<li><b>JwtAuthFilter</b> verifies the Bearer token's signature → puts the <code>Principal</code> (userId, tenantId, role) in the security context. No token / bad token → <b>401</b>.</li>
+<li><b>Input guards</b> (streaming bypasses advisors, so the controller enforces them): rate limiter → budget → injection screen. Any trip → instant refusal, no LLM.</li>
+<li><b>Semantic cache</b> lookup (per-tenant). Hit → stream the cached answer as one chunk (~15ms), done.</li>
+<li><b>Scope gate</b> (context-aware classifier). Off-domain → canned redirect, no main call.</li>
+<li><b>PII redaction</b> on the input.</li>
+<li><b>The guarded model stream</b>: <code>llmGuard.guard(assistant.prompt()…stream())</code> — circuit breaker + timeout wrap the token flux. The model may call tools mid-stream (each enforcing authz + tenant).</li>
+<li><b>Boundary-buffered output sanitization</b>: accumulate tokens; at each sentence/newline, redact PII &amp; drop leaked tool-calls, then flush that segment as an SSE event.</li>
+<li><b>On completion</b>: cache the answer if safe (not dynamic, not a refusal), record token usage against the budget, emit a final <code>meta</code> event (source, elapsedMs).</li>
+</ol>
+
+<figure><div class="diagram">
+<svg viewBox="0 0 720 360" role="img" aria-label="Full request lifecycle flowchart">
+  <g font-size="11.5" text-anchor="middle">
+  <rect x="290" y="10" width="140" height="38" rx="8" fill="#161b22" stroke="#f472b6"/><text x="360" y="34" fill="#f472b6">POST /assistant/stream</text>
+  <rect x="290" y="66" width="140" height="38" rx="8" fill="#161b22" stroke="#2a3140"/><text x="360" y="84" fill="#e6edf3">JWT verify</text><text x="360" y="98" fill="#9aa5b1">401 if bad</text>
+  <rect x="290" y="122" width="140" height="38" rx="8" fill="#161b22" stroke="#fbbf24"/><text x="360" y="140" fill="#fbbf24">rate / budget /</text><text x="360" y="154" fill="#fbbf24">injection</text>
+  <rect x="290" y="178" width="140" height="38" rx="8" fill="#161b22" stroke="#4ade80"/><text x="360" y="196" fill="#4ade80">semantic cache?</text><text x="360" y="210" fill="#9aa5b1">hit → done (15ms)</text>
+  <rect x="290" y="234" width="140" height="38" rx="8" fill="#161b22" stroke="#60a5fa"/><text x="360" y="252" fill="#60a5fa">scope gate?</text><text x="360" y="266" fill="#9aa5b1">off-domain → block</text>
+  <rect x="290" y="290" width="140" height="46" rx="8" fill="#1c2230" stroke="#4ade80"/><text x="360" y="308" fill="#4ade80">GUARDED STREAM</text><text x="360" y="322" fill="#9aa5b1">tools · circuit · sanitize</text>
+  <!-- side exits -->
+  <rect x="500" y="178" width="150" height="38" rx="8" fill="#161b22" stroke="#4ade80"/><text x="575" y="202" fill="#4ade80">⚡ cached answer</text>
+  <rect x="500" y="234" width="150" height="38" rx="8" fill="#161b22" stroke="#60a5fa"/><text x="575" y="258" fill="#60a5fa">🛡️ redirect</text>
+  <rect x="70" y="122" width="150" height="38" rx="8" fill="#161b22" stroke="#fbbf24"/><text x="145" y="146" fill="#fbbf24">refuse (no LLM)</text>
+  </g>
+  <g stroke="#7d8590"><path d="M360 48 v18" marker-end="url(#ar8)"/><path d="M360 104 v18" marker-end="url(#ar8)"/><path d="M360 160 v18" marker-end="url(#ar8)"/><path d="M360 216 v18" marker-end="url(#ar8)"/><path d="M360 272 v18" marker-end="url(#ar8)"/></g>
+  <path d="M430 197 h70" stroke="#4ade80" marker-end="url(#ar8)"/>
+  <path d="M430 253 h70" stroke="#60a5fa" marker-end="url(#ar8)"/>
+  <path d="M290 141 h-70" stroke="#fbbf24" marker-end="url(#ar8)"/>
+  <defs><marker id="ar8" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="#7d8590"/></marker></defs>
+</svg></div>
+<figcaption>Every message runs this gauntlet. Cheap fast-exits (cache, scope, refusals) happen before the expensive LLM path.</figcaption></figure>
+
+<!-- ============================================================= -->
+<h2 id="frameworks">17 · Frameworks vs Raw Code</h2>
+
+<p>A recurring real-world question: LangChain (or Spring AI) vs calling the model SDK directly?</p>
+<div class="card info"><div class="lead">Why raw is faster</div>
+The network call is identical either way; frameworks add overhead in two forms: (1) a small <b>per-call tax</b>
+(prompt templating, callbacks, parsing) of tens of ms; (2) the bigger one — <b>hidden extra LLM calls</b> (agent loops,
+output-fixing retries). Configure the framework to do the <em>same work</em> (single call, matched params, no agent) and
+the times converge — the residual tax is negligible against a multi-second LLM call. The features that make a framework
+convenient (agents, auto-retry) are the same ones that add latency.</div>
+<div class="card tip"><div class="lead">The trade, decided honestly</div>
+<b>To learn cutting-edge GenAI</b> → Python raw/light. Richest ecosystem; re-rankers &amp; sentence-transformers are one
+import. <b>For a secure banking copilot on a JVM stack</b> → Spring AI. A banking app is ~80% enterprise plumbing (auth,
+resilience, observability, ops) — Java's strength — and ~20% "call the LLM." Production shops often do <b>both</b>:
+Java/Spring for the app + a small Python sidecar for ML-heavy bits (embeddings, re-ranking). Go raw on the hot path when
+latency is the constraint; keep the framework where developer speed and built-in patterns matter more.</div>
+
+<!-- ============================================================= -->
+<h2 id="roadmap">18 · What Still Needs Learning</h2>
+
+<p>You now understand the foundation. To reach true production-grade at banking scale, here's the honest roadmap — grouped
+by why each matters.</p>
+
+<h4>Retrieval at scale</h4>
+<ul>
+<li><b>Hybrid search (BM25 + RRF)</b> — needed once users query exact tokens (codes, form names) or the corpus grows.</li>
+<li><b>Cross-encoder re-ranking</b> — the accuracy pass over a shortlist; needed past a few thousand chunks.</li>
+<li><b>Advanced chunking</b> — semantic/hierarchical chunking, parent-document retrieval, contextual retrieval.</li>
+<li><b>Evaluation frameworks</b> — RAGAS-style metrics (faithfulness, context precision/recall) wired into CI.</li>
+</ul>
+<h4>Model &amp; generation depth</h4>
+<ul>
+<li><b>Sampling internals</b> — logits, softmax, top-p/top-k interplay, mirostat, speculative decoding.</li>
+<li><b>Fine-tuning vs RAG vs prompting</b> — when each wins; LoRA/QLoRA, instruction tuning.</li>
+<li><b>Structured generation</b> — grammar/JSON-schema-constrained decoding for guaranteed-valid output.</li>
+<li><b>Multimodality</b> — images/PDFs/audio as inputs (statement scans, cheque images).</li>
+</ul>
+<h4>Scale &amp; serving</h4>
+<ul>
+<li><b>Horizontal model serving</b> — vLLM (continuous batching, PagedAttention), multiple replicas, hosted APIs. This is the real fix for the throughput ceiling the stress test exposed.</li>
+<li><b>Distributed cache</b> — Redis-backed semantic cache so hits are shared across instances.</li>
+<li><b>GPU economics</b> — batching, quantization (GGUF/AWQ), KV-cache, cost-per-1k-tokens modeling.</li>
+</ul>
+<h4>Security &amp; agents</h4>
+<ul>
+<li><b>OAuth2 on the MCP endpoint</b> — currently open for the POC.</li>
+<li><b>NER-based PII</b> — names/addresses (beyond regex for cards/SSN/IBAN/email).</li>
+<li><b>Multi-agent orchestration</b> — planner/executor, evaluator-optimizer loops, MCP <em>client</em> for external tools.</li>
+<li><b>Jailbreak &amp; red-teaming</b> — adversarial suites, prompt-injection benchmarks, guardrail models (Llama Guard).</li>
+</ul>
+
+<div class="card key"><div class="lead">The one principle to carry into all of it</div>
+<b>Prompts are requests; code is enforcement; evals are the regression net; the model is the lever, not the rules.</b>
+Every hard problem in this guide was solved by moving the guarantee <em>out of the prompt and into code</em>, choosing the
+right <em>model/embedding for the job</em>, and letting a <em>measured number</em> decide when to add complexity. Master
+that judgment and the specific techniques are just tools.</div>
+
+<!-- ============================================================= -->
+<h2 id="glossary">19 · Glossary</h2>
+<table>
+<tr><th>Term</th><th>Definition</th></tr>
+<tr><td><b>ANN</b></td><td>Approximate Nearest Neighbor — fast, slightly-inexact vector search (vs brute-force exact k-NN).</td></tr>
+<tr><td><b>Advisor</b></td><td>Spring AI interceptor wrapping a model call (audit, guardrails, memory).</td></tr>
+<tr><td><b>BM25</b></td><td>Classic lexical ranking function (term frequency × inverse document frequency, saturated &amp; length-normalized).</td></tr>
+<tr><td><b>BPE</b></td><td>Byte-Pair Encoding — the tokenizer algorithm that builds the subword vocabulary.</td></tr>
+<tr><td><b>Bi-encoder</b></td><td>Encodes query and document separately into vectors; fast, pre-computable, less precise.</td></tr>
+<tr><td><b>Chunk</b></td><td>A passage a document is split into for embedding/retrieval.</td></tr>
+<tr><td><b>Circuit breaker</b></td><td>Resilience pattern that fast-fails calls after repeated failures to shed load and allow recovery.</td></tr>
+<tr><td><b>Context window</b></td><td>Max tokens (prompt + generation) a model can process at once.</td></tr>
+<tr><td><b>Cosine similarity</b></td><td>Cosine of the angle between two vectors; the standard text-embedding closeness measure.</td></tr>
+<tr><td><b>Cross-encoder</b></td><td>Scores a query+document pair jointly in one pass; accurate re-ranker, not pre-computable.</td></tr>
+<tr><td><b>Embedding</b></td><td>A vector representing text meaning; similar meanings → nearby vectors.</td></tr>
+<tr><td><b>HNSW</b></td><td>Hierarchical Navigable Small World — the popular multi-layer-graph ANN index.</td></tr>
+<tr><td><b>Hybrid search</b></td><td>Dense (vector) + sparse (BM25) search combined, usually via RRF.</td></tr>
+<tr><td><b>Logit</b></td><td>Raw pre-softmax score the model assigns each vocabulary token.</td></tr>
+<tr><td><b>HITL</b></td><td>Human-in-the-loop — a human approves consequential actions (e.g., money movement).</td></tr>
+<tr><td><b>MCP</b></td><td>Model Context Protocol — a standard for exposing tools/resources to LLM clients.</td></tr>
+<tr><td><b>PII</b></td><td>Personally Identifiable Information (card numbers, SSN, IBAN, email…).</td></tr>
+<tr><td><b>RAG</b></td><td>Retrieval-Augmented Generation — inject retrieved documents into the prompt to ground answers.</td></tr>
+<tr><td><b>Re-ranker</b></td><td>Second-stage model that re-scores retrieval candidates for precision.</td></tr>
+<tr><td><b>RRF</b></td><td>Reciprocal Rank Fusion — merges ranked lists via Σ 1/(k+rank); scale-free.</td></tr>
+<tr><td><b>Semantic cache</b></td><td>Cache keyed by meaning (embedding similarity) rather than exact string.</td></tr>
+<tr><td><b>Softmax</b></td><td>Turns logits into a probability distribution summing to 1.</td></tr>
+<tr><td><b>SSE</b></td><td>Server-Sent Events — one-way server→client streaming over HTTP (used for token streaming).</td></tr>
+<tr><td><b>Temperature</b></td><td>Sampling knob scaling logits; low = focused/deterministic, high = varied/creative.</td></tr>
+<tr><td><b>Token</b></td><td>Subword unit the model reads/produces; ~4 chars in English.</td></tr>
+<tr><td><b>top-k / top-p</b></td><td>Sampling filters: keep the k best tokens / the smallest set summing to probability p.</td></tr>
+<tr><td><b>Vector store</b></td><td>Database indexing embeddings for similarity search (ours: pgvector).</td></tr>
+</table>
+
+<hr>
+<p class="meta">AegisAI GenAI Study Guide · generated from the project source · Spring AI 1.0.9 · qwen2.5:7b · nomic-embed-text (768d) · all-minilm · pgvector (HNSW/cosine).
+Every claim here is implemented or explicitly marked "not implemented / deliberately deferred." Keep it honest.</p>
+
+</div>
+</body>
+</html>

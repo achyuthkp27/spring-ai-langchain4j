@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Achu FinBot — Admin</title>
+<style>
+  :root {
+    --bg:#0b0d12; --panel:#141821; --panel-2:#1a1f2b; --line:#262b36;
+    --txt:#e8eaf0; --sec:#c3c2b7; --mut:#8a92a6; --grid:#242936;
+    /* outcome series — validated (dark, surface #141821): all ≥3:1, worst ΔE 35.9 */
+    --s-llm:#3987e5; --s-cache:#199e70; --s-blocked:#c98500; --s-error:#e66767;
+    --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+         background:var(--bg); color:var(--txt); }
+  header { display:flex; align-items:center; gap:12px; padding:12px 22px;
+           border-bottom:1px solid var(--line); position:sticky; top:0; background:rgba(11,13,18,.92);
+           backdrop-filter:blur(6px); z-index:5; }
+  .logo { width:32px; height:32px; border-radius:9px; display:grid; place-items:center;
+          font-size:16px; background:linear-gradient(135deg,#2563eb,#4f46e5); }
+  h1 { font-size:15px; margin:0; font-weight:650; }
+  .sub { font-size:11.5px; color:var(--mut); }
+  .spacer { flex:1; }
+  .chip { font-size:11.5px; border:1px solid var(--line); border-radius:999px; padding:3px 10px;
+          color:var(--sec); }
+  .chip b { color:var(--txt); font-weight:600; }
+  .chip .dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:5px; }
+  button { background:var(--panel); color:var(--txt); border:1px solid var(--line);
+           border-radius:8px; padding:6px 12px; font-size:12.5px; cursor:pointer; }
+  button:hover { border-color:#2563eb; }
+  button.primary { background:linear-gradient(135deg,#2563eb,#4f46e5); border:0; font-weight:600; }
+
+  main { max-width:1180px; margin:0 auto; padding:18px 22px 60px; display:flex;
+         flex-direction:column; gap:16px; }
+  section.card { background:var(--panel); border:1px solid var(--line); border-radius:14px;
+                 padding:16px 18px; }
+  .card h2 { font-size:13px; margin:0 0 4px; font-weight:650; }
+  .card .desc { font-size:11.5px; color:var(--mut); margin:0 0 12px; }
+
+  /* stat tiles */
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+  .tile { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:14px 16px; }
+  .tile .k { font-size:11.5px; color:var(--mut); }
+  .tile .v { font-size:26px; font-weight:700; margin-top:2px; }
+  .tile .s { font-size:11px; color:var(--sec); margin-top:2px; }
+
+  /* legend + chart */
+  .legend { display:flex; gap:14px; flex-wrap:wrap; font-size:11.5px; color:var(--sec);
+            margin-bottom:8px; }
+  .legend .sw { display:inline-block; width:10px; height:10px; border-radius:3px;
+                margin-right:5px; vertical-align:-1px; }
+  svg text { font:10.5px system-ui,sans-serif; fill:var(--mut);
+             font-variant-numeric:tabular-nums; }
+  #tooltip { position:fixed; pointer-events:none; background:var(--panel-2);
+             border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:11.5px;
+             display:none; z-index:20; box-shadow:0 6px 20px rgba(0,0,0,.4); }
+  #tooltip b { display:block; margin-bottom:3px; }
+  #tooltip .trow { display:flex; gap:8px; justify-content:space-between; }
+  #tooltip .trow span:last-child { font-variant-numeric:tabular-nums; }
+
+  /* tables */
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  th { text-align:left; color:var(--mut); font-weight:600; font-size:11px; padding:6px 8px;
+       border-bottom:1px solid var(--line); }
+  td { padding:7px 8px; border-bottom:1px solid var(--grid); vertical-align:top; }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  tr:hover td { background:rgba(255,255,255,.02); }
+  .badge { font-size:10.5px; padding:2px 8px; border-radius:999px; font-weight:600;
+           white-space:nowrap; }
+  .b-llm { background:rgba(57,135,229,.15); color:#7fb3f0; }
+  .b-cache { background:rgba(25,158,112,.16); color:#4ecfa0; }
+  .b-blocked { background:rgba(201,133,0,.16); color:#e8b04d; }
+  .b-error { background:rgba(230,103,103,.15); color:#ef9a9a; }
+  .q { color:var(--sec); }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:900px){ .grid2 { grid-template-columns:1fr; } }
+
+  /* horizontal bars */
+  .hbar-row { display:grid; grid-template-columns:170px 1fr 60px; gap:10px; align-items:center;
+              padding:4px 0; font-size:12px; }
+  .hbar-row .lbl { color:var(--sec); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .hbar-track { height:14px; border-radius:4px; position:relative; }
+  .hbar-fill { height:100%; border-radius:4px; min-width:2px; }
+  .hbar-val { text-align:right; font-variant-numeric:tabular-nums; color:var(--txt); }
+
+  .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  input[type=text], input[type=number] { background:var(--panel-2); border:1px solid var(--line);
+      color:var(--txt); border-radius:8px; padding:6px 10px; font-size:12.5px; width:130px; }
+  #transcript { max-height:420px; overflow-y:auto; display:flex; flex-direction:column; gap:8px;
+                margin-top:10px; }
+  .tmsg { padding:8px 12px; border-radius:10px; max-width:82%; white-space:pre-wrap; font-size:12.5px; }
+  .tmsg.USER { background:#1d3a8a55; align-self:flex-end; }
+  .tmsg.ASSISTANT { background:var(--panel-2); border:1px solid var(--line); align-self:flex-start; }
+  .tmsg .who { font-size:10px; color:var(--mut); margin-bottom:3px; }
+  .empty { color:var(--mut); font-size:12px; padding:12px 0; }
+  a.back { color:#7fb3f0; font-size:12px; cursor:pointer; text-decoration:none; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">🛡️</div>
+  <div><h1>Achu FinBot — Admin</h1><div class="sub">audit &amp; analytics</div></div>
+  <div class="spacer"></div>
+  <span class="chip">model <b id="model">…</b></span>
+  <span class="chip"><span class="dot" id="circuit-dot" style="background:var(--mut)"></span>circuit <b id="circuit">…</b></span>
+  <span class="chip">up <b id="uptime">…</b>m</span>
+  <button id="refresh" class="primary">↻ Refresh</button>
+</header>
+
+<main>
+  <div class="tiles" id="tiles"></div>
+
+  <section class="card">
+    <h2>Traffic — last 60 minutes</h2>
+    <p class="desc">Requests per minute by outcome. Hover a bar for the breakdown.</p>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--s-llm)"></span>LLM answered</span>
+      <span><span class="sw" style="background:var(--s-cache)"></span>Semantic cache</span>
+      <span><span class="sw" style="background:var(--s-blocked)"></span>Blocked (guardrails)</span>
+      <span><span class="sw" style="background:var(--s-error)"></span>Unavailable / error</span>
+    </div>
+    <div id="traffic"></div>
+  </section>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>Outcome breakdown</h2>
+      <p class="desc">Every request's fate since startup — including which guardrail blocked it.</p>
+      <div id="sources"></div>
+    </section>
+    <section class="card">
+      <h2>Latency (ms, retained window)</h2>
+      <p class="desc">Per outcome; p95 is what users actually feel.</p>
+      <table id="latency"><thead><tr>
+        <th>Outcome</th><th class="num">Count</th><th class="num">Avg</th>
+        <th class="num">p50</th><th class="num">p95</th><th class="num">Max</th>
+      </tr></thead><tbody></tbody></table>
+    </section>
+  </div>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>Tool usage</h2>
+      <p class="desc">Which capabilities the assistant actually exercises (and denied attempts).</p>
+      <div id="tools"></div>
+    </section>
+    <section class="card">
+      <h2>Token spend &amp; budgets</h2>
+      <p class="desc">Real token counts per tenant/model; budget consumption from the stream estimate.</p>
+      <table id="spend"><thead><tr>
+        <th>Tenant</th><th>Model</th><th class="num">Tokens</th><th class="num">Budget used</th>
+      </tr></thead><tbody></tbody></table>
+      <div class="controls" style="margin-top:12px">
+        <input type="text" id="b-tenant" placeholder="tenant id"/>
+        <input type="number" id="b-amount" placeholder="budget tokens"/>
+        <button id="b-set">Set budget</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>RAG corpus</h2>
+      <p class="desc">Policy chunks in the vector store, per tenant.</p>
+      <table id="rag"><thead><tr>
+        <th>Tenant</th><th class="num">Documents</th><th class="num">Chunks</th>
+      </tr></thead><tbody></tbody></table>
+      <div class="controls" style="margin-top:12px">
+        <button id="ingest">⟳ Re-ingest documents</button>
+        <button id="clearcache">🧹 Clear semantic cache</button>
+        <span id="opmsg" class="sub"></span>
+      </div>
+    </section>
+    <section class="card">
+      <h2>Conversations</h2>
+      <p class="desc">From JDBC chat memory. Click one to read the transcript.</p>
+      <div id="convs"></div>
+      <div id="transcript"></div>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Recent events</h2>
+    <p class="desc">Latest assistant requests (newest first). Question previews are PII-redacted.</p>
+    <table id="events"><thead><tr>
+      <th>Time</th><th>Tenant</th><th>User</th><th>Outcome</th><th class="num">ms</th><th>Question</th>
+    </tr></thead><tbody></tbody></table>
+  </section>
+</main>
+
+<div id="tooltip"></div>
+
+<script>
+  // ---------- auth (admin role; APIs 403 for anyone else) ----------
+  let jwt = null;
+  async function token() {
+    if (jwt) return jwt;
+    const r = await fetch('/api/auth/token', { method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ userId:'achu-admin', tenantId:'achu-bank', role:'admin' }) });
+    jwt = (await r.json()).token;
+    return jwt;
+  }
+  async function api(path, opts = {}) {
+    const call = async () => fetch(path, { ...opts,
+      headers: { ...(opts.headers||{}), 'Authorization': 'Bearer ' + await token() } });
+    let r = await call();
+    if (r.status === 401) { jwt = null; r = await call(); }
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' on ' + path);
+    return r.json();
+  }
+
+  const $ = id => document.getElementById(id);
+  const esc = s => (s ?? '').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const fmt = n => Number(n).toLocaleString();
+  const tip = $('tooltip');
+  function showTip(html, x, y) {
+    tip.innerHTML = html; tip.style.display = 'block';
+    const w = tip.offsetWidth;
+    tip.style.left = Math.min(x + 14, innerWidth - w - 10) + 'px';
+    tip.style.top = (y + 14) + 'px';
+  }
+  function hideTip() { tip.style.display = 'none'; }
+
+  const SERIES = [
+    { key:'llm',     name:'LLM answered',       color:'var(--s-llm)' },
+    { key:'cache',   name:'Semantic cache',     color:'var(--s-cache)' },
+    { key:'blocked', name:'Blocked',            color:'var(--s-blocked)' },
+    { key:'error',   name:'Unavailable/error',  color:'var(--s-error)' },
+  ];
+  const badge = src => src === 'llm' ? 'b-llm' : src === 'cache' ? 'b-cache'
+                     : src.startsWith('blocked') ? 'b-blocked' : 'b-error';
+
+  // ---------- traffic chart: stacked per-minute bars, hand-rolled SVG ----------
+  function renderTraffic(rows) {
+    const W = 1080, H = 190, padL = 34, padB = 20, padT = 8;
+    const n = rows.length;
+    const totals = rows.map(r => SERIES.reduce((s, sr) => s + (r[sr.key]||0), 0));
+    const maxY = Math.max(4, ...totals);
+    const bw = Math.max(3, (W - padL - 8) / n - 2);          // 2px surface gap between bars
+    const y = v => padT + (H - padT - padB) * (1 - v / maxY);
+    let bars = '', axis = '';
+    rows.forEach((r, i) => {
+      const x = padL + i * ((W - padL - 8) / n);
+      let acc = 0, segs = '';
+      SERIES.forEach(sr => {
+        const v = r[sr.key] || 0;
+        if (!v) return;
+        const y1 = y(acc + v), y0 = y(acc);
+        // 2px gap between stacked segments; rounded top only on the topmost run
+        segs += `<rect x="${x}" y="${y1}" width="${bw}" height="${Math.max(1, y0 - y1 - (acc?2:0))}"
+                  rx="2" fill="${sr.color}"></rect>`;
+        acc += v;
+      });
+      const label = rows[i].minute.slice(11, 16);
+      if (i % 10 === 0 || i === n - 1) axis += `<text x="${x}" y="${H - 5}">${label}</text>`;
+      bars += `<g class="bar" data-i="${i}">
+                 <rect x="${x - 1}" y="${padT}" width="${bw + 2}" height="${H - padT - padB}"
+                       fill="transparent"></rect>${segs}</g>`;
+    });
+    let grid = '';
+    for (const gv of [0, Math.ceil(maxY / 2), maxY]) {
+      grid += `<line x1="${padL}" x2="${W - 8}" y1="${y(gv)}" y2="${y(gv)}"
+                stroke="var(--grid)" stroke-width="1"></line>
+               <text x="${padL - 6}" y="${y(gv) + 3}" text-anchor="end">${gv}</text>`;
+    }
+    $('traffic').innerHTML =
+      `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img"
+            aria-label="Requests per minute by outcome">${grid}${bars}${axis}</svg>`;
+    $('traffic').querySelectorAll('.bar').forEach(g => {
+      g.addEventListener('mousemove', e => {
+        const r = rows[+g.dataset.i];
+        const lines = SERIES.map(sr =>
+          `<div class="trow"><span><span class="sw" style="background:${sr.color};display:inline-block;
+             width:8px;height:8px;border-radius:2px;margin-right:5px"></span>${sr.name}</span>
+             <span>${r[sr.key] || 0}</span></div>`).join('');
+        showTip(`<b>${r.minute.slice(11,16)} UTC</b>${lines}`, e.clientX, e.clientY);
+      });
+      g.addEventListener('mouseleave', hideTip);
+    });
+  }
+
+  // ---------- horizontal bar lists (single-hue: magnitude; identity is the row label) ----------
+  function hbars(el, entries, color) {
+    if (!entries.length) { el.innerHTML = '<div class="empty">No data yet.</div>'; return; }
+    const max = Math.max(...entries.map(e => e.value));
+    el.innerHTML = entries.map(e => `
+      <div class="hbar-row" title="${esc(e.title || e.label)}">
+        <span class="lbl">${esc(e.label)}</span>
+        <div class="hbar-track"><div class="hbar-fill"
+             style="width:${Math.max(2, e.value / max * 100)}%; background:${e.color || color}"></div></div>
+        <span class="hbar-val">${fmt(e.value)}</span>
+      </div>`).join('');
+  }
+
+  // ---------- panels ----------
+  function renderTiles(o) {
+    const r = o.requests, lat = (o.latencyMs.all || {});
+    const tokens = o.tokenSpend.reduce((s, t) => s + t.tokens, 0);
+    $('tiles').innerHTML = [
+      ['Requests', fmt(r.total), 'since startup'],
+      ['LLM calls', fmt(r.llm), 'full model invocations'],
+      ['Cache hit rate', Math.round(r.cacheHitRate * 100) + '%', fmt(r.cache) + ' served from cache'],
+      ['Blocked', fmt(r.blocked), 'guardrail interventions'],
+      ['p95 latency', fmt(lat.p95 || 0) + ' ms', 'avg ' + fmt(lat.avg || 0) + ' ms'],
+      ['Tokens spent', fmt(tokens), 'all tenants & models'],
+    ].map(([k, v, s]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div>
+                          <div class="s">${s}</div></div>`).join('');
+  }
+
+  function renderSources(o) {
+    const entries = Object.entries(o.bySource).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({
+      label: k, value: v,
+      color: `var(--s-${k === 'llm' ? 'llm' : k === 'cache' ? 'cache'
+              : k.startsWith('blocked') ? 'blocked' : 'error'})`
+    }));
+    hbars($('sources'), entries, 'var(--s-llm)');
+  }
+
+  function renderLatency(o) {
+    $('latency').querySelector('tbody').innerHTML =
+      Object.entries(o.latencyMs).map(([src, m]) => `<tr>
+        <td><span class="badge ${badge(src === 'all' ? 'llm' : src)}">${esc(src)}</span></td>
+        <td class="num">${fmt(m.count)}</td><td class="num">${fmt(m.avg)}</td>
+        <td class="num">${fmt(m.p50)}</td><td class="num">${fmt(m.p95)}</td>
+        <td class="num">${fmt(m.max)}</td></tr>`).join('')
+      || '<tr><td colspan="6" class="empty">No traffic yet.</td></tr>';
+  }
+
+  function renderTools(o) {
+    const entries = Object.entries(o.toolUsage).map(([tool, byTenant]) => ({
+      label: tool,
+      value: Object.values(byTenant).reduce((a, b) => a + b, 0),
+      title: Object.entries(byTenant).map(([t, c]) => `${t}: ${c}`).join(', '),
+      color: tool.startsWith('denied') ? 'var(--s-error)' : 'var(--s-llm)',
+    })).sort((a, b) => b.value - a.value);
+    hbars($('tools'), entries, 'var(--s-llm)');
+  }
+
+  function renderSpend(o) {
+    $('spend').querySelector('tbody').innerHTML =
+      o.tokenSpend.sort((a, b) => b.tokens - a.tokens).map(s => `<tr>
+        <td>${esc(s.tenant)}</td><td>${esc(s.model)}</td>
+        <td class="num">${fmt(s.tokens)}</td>
+        <td class="num">${fmt((o.tenantBudgets[s.tenant] || {}).budgetConsumed ?? 0)}</td></tr>`).join('')
+      || '<tr><td colspan="4" class="empty">No LLM calls recorded yet.</td></tr>';
+  }
+
+  function renderEvents(evts) {
+    $('events').querySelector('tbody').innerHTML = evts.map(e => `<tr>
+      <td class="num">${new Date(e.at).toLocaleTimeString()}</td>
+      <td>${esc(e.tenant)}</td><td>${esc(e.user)}</td>
+      <td><span class="badge ${badge(e.source)}">${esc(e.source)}</span></td>
+      <td class="num">${fmt(e.elapsedMs)}</td>
+      <td class="q">${esc(e.question)}</td></tr>`).join('')
+      || '<tr><td colspan="6" class="empty">No events yet — talk to the bot first.</td></tr>';
+  }
+
+  async function renderConvs() {
+    const list = await api('/api/admin/conversations?limit=30');
+    if (!list.length) { $('convs').innerHTML = '<div class="empty">No conversations stored.</div>'; return; }
+    $('convs').innerHTML = `<table><thead><tr><th>Tenant</th><th>User</th><th>Conversation</th>
+      <th class="num">Msgs</th><th>Last activity</th></tr></thead><tbody>` +
+      list.map(c => `<tr style="cursor:pointer" data-id="${esc(c.id)}">
+        <td>${esc(c.tenant)}</td><td>${esc(c.user)}</td><td>${esc(c.conversation)}</td>
+        <td class="num">${fmt(c.messages)}</td>
+        <td class="num">${new Date(c.lastAt).toLocaleString()}</td></tr>`).join('') + '</tbody></table>';
+    $('convs').querySelectorAll('tr[data-id]').forEach(tr =>
+      tr.addEventListener('click', () => showTranscript(tr.dataset.id)));
+  }
+
+  async function showTranscript(id) {
+    const msgs = await api('/api/admin/conversations/' + encodeURIComponent(id) + '/messages');
+    $('transcript').innerHTML =
+      `<a class="back">✕ close transcript — ${esc(id)}</a>` +
+      msgs.map(m => `<div class="tmsg ${esc(m.type)}"><div class="who">${esc(m.type)}
+        · ${new Date(m.at).toLocaleTimeString()}</div>${esc(m.content)}</div>`).join('');
+    $('transcript').querySelector('.back').onclick = () => $('transcript').innerHTML = '';
+  }
+
+  async function renderRag() {
+    const rows = await api('/api/admin/rag');
+    $('rag').querySelector('tbody').innerHTML = rows.map(r => `<tr>
+      <td>${esc(r.tenant)}</td><td class="num">${fmt(r.documents)}</td>
+      <td class="num">${fmt(r.chunks)}</td></tr>`).join('')
+      || '<tr><td colspan="3" class="empty">Vector store is empty — run ingest.</td></tr>';
+  }
+
+  // ---------- actions ----------
+  $('b-set').onclick = async () => {
+    const tenantId = $('b-tenant').value.trim(), budget = +$('b-amount').value;
+    if (!tenantId || !budget) return;
+    await api('/api/admin/budget', { method:'POST',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify({ tenantId, budget }) });
+    $('opmsg').textContent = `budget for ${tenantId} set to ${fmt(budget)}`;
+    refresh();
+  };
+  $('ingest').onclick = async () => {
+    $('opmsg').textContent = 'ingesting…';
+    const r = await api('/api/admin/ingest', { method:'POST' });
+    $('opmsg').textContent = `ingested ${r.chunksIngested} chunks`;
+    renderRag();
+  };
+  $('clearcache').onclick = async () => {
+    await api('/api/admin/cache/clear', { method:'POST' });
+    $('opmsg').textContent = 'semantic cache cleared';
+  };
+  $('refresh').onclick = () => refresh();
+
+  // ---------- refresh loop ----------
+  async function refresh() {
+    try {
+      const [o, ts, evts] = await Promise.all([
+        api('/api/admin/overview'), api('/api/admin/timeseries?minutes=60'),
+        api('/api/admin/events?limit=50')]);
+      $('model').textContent = o.chatModel;
+      $('circuit').textContent = o.llmCircuit;
+      $('circuit-dot').style.background = o.llmCircuit === 'CLOSED' ? 'var(--good)'
+        : o.llmCircuit === 'OPEN' ? 'var(--crit)' : 'var(--warn)';
+      $('uptime').textContent = o.uptimeMinutes;
+      renderTiles(o); renderTraffic(ts); renderSources(o); renderLatency(o);
+      renderTools(o); renderSpend(o); renderEvents(evts);
+    } catch (e) {
+      $('opmsg').textContent = 'refresh failed: ' + e.message;
+    }
+  }
+  refresh(); renderConvs(); renderRag();
+  setInterval(refresh, 10_000);
+  setInterval(renderConvs, 30_000);
+</script>
+</body>
+</html>

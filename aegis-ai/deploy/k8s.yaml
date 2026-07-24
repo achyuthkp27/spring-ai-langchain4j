@@ -1,0 +1,124 @@
+# AegisAI — production Kubernetes manifests (Phase 6)
+# Reuses the patterns from ../../Answers/... and the kubernetes.md interview doc:
+# resource requests/limits (Guaranteed QoS), HPA, PDB, readiness/liveness probes,
+# a preStop drain, and a NetworkPolicy that isolates the model-egress path.
+#
+# This is a reference deployment; it assumes an image aegis-ai:0.1.0 has been built
+# and pushed, and that Postgres + a model endpoint are reachable in-cluster.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aegis
+  labels:
+    # Pod Security Admission: enforce the hardened profile (kubernetes.md §9 Q3)
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegis-copilot
+  namespace: aegis
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: aegis-copilot }
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0          # never drop capacity mid-rollout
+  template:
+    metadata:
+      labels: { app: aegis-copilot }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: aegis
+          image: aegis-ai:0.1.0
+          ports: [{ containerPort: 8080 }]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:                       # requests == limits → Guaranteed QoS
+            requests: { cpu: "1", memory: "1Gi" }
+            limits:   { cpu: "1", memory: "1Gi" }
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgres.aegis.svc:5432/aegis
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom: { secretKeyRef: { name: aegis-db, key: username } }
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom: { secretKeyRef: { name: aegis-db, key: password } }
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:                   # cheap, dependency-free (kubernetes.md §7 Q2)
+            httpGet: { path: /actuator/health/liveness, port: 8080 }
+            periodSeconds: 10
+          lifecycle:
+            preStop:
+              exec: { command: ["sh", "-c", "sleep 8"] }  # drain window (§7 Q3/Q5)
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      terminationGracePeriodSeconds: 45
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aegis-copilot
+  namespace: aegis
+spec:
+  selector: { app: aegis-copilot }
+  ports: [{ port: 80, targetPort: 8080 }]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aegis-copilot
+  namespace: aegis
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: aegis-copilot }
+  minReplicas: 3
+  maxReplicas: 12
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aegis-copilot
+  namespace: aegis
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels: { app: aegis-copilot }
+---
+# Default-deny egress, then allow only DB, DNS, and the model endpoint.
+# This is the LLM data-egress control: the app can't call arbitrary external
+# hosts, mitigating exfiltration if a prompt-injection ever slips a guardrail.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aegis-copilot-egress
+  namespace: aegis
+spec:
+  podSelector:
+    matchLabels: { app: aegis-copilot }
+  policyTypes: ["Egress"]
+  egress:
+    - to: [{ podSelector: { matchLabels: { app: postgres } } }]
+      ports: [{ port: 5432 }]
+    - to: [{ namespaceSelector: {} }]         # DNS
+      ports: [{ port: 53, protocol: UDP }]
+    - to: [{ podSelector: { matchLabels: { app: ollama } } }]  # in-cluster model (sovereign mode)
+      ports: [{ port: 11434 }]

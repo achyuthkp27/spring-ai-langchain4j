@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Achu FinBot — Achu Bank</title>
+  <style>
+    :root {
+      --bg:#0b0d12; --panel:#141821; --panel-2:#1a1f2b; --line:#262b36;
+      --txt:#e8eaf0; --mut:#8a92a6; --accent:#4ade80;
+      --me1:#2563eb; --me2:#4f46e5;
+      --r-lg:16px; --r-sm:6px;
+    }
+    * { box-sizing:border-box; }
+    html, body { height:100%; }
+    body { margin:0; font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+           background:radial-gradient(1200px 500px at 50% -10%, #131a2b 0%, var(--bg) 60%);
+           color:var(--txt); display:flex; flex-direction:column; }
+
+    /* ---------- header ---------- */
+    header { display:flex; align-items:center; gap:12px; padding:12px 20px;
+             border-bottom:1px solid var(--line); backdrop-filter:blur(6px); }
+    .logo { width:34px; height:34px; border-radius:10px; display:grid; place-items:center;
+            font-size:18px; background:linear-gradient(135deg,var(--me1),var(--me2)); }
+    .titles { line-height:1.2; }
+    .titles h1 { font-size:15px; margin:0; font-weight:650; }
+    .titles .sub { font-size:11.5px; color:var(--mut); }
+    .sub .dot { display:inline-block; width:7px; height:7px; border-radius:50%;
+                background:var(--accent); margin-right:5px; vertical-align:1px; }
+    header .spacer { flex:1; }
+    .chip { font-size:11.5px; color:var(--mut); border:1px solid var(--line);
+            border-radius:999px; padding:3px 10px; }
+    .hbtn { background:var(--panel); color:var(--txt); border:1px solid var(--line);
+            border-radius:8px; padding:6px 11px; font-size:12.5px; cursor:pointer; }
+    .hbtn:hover { border-color:var(--me1); }
+
+    /* ---------- messages ---------- */
+    #log { flex:1; overflow-y:auto; padding:22px 20px 10px; display:flex; flex-direction:column;
+           gap:14px; max-width:860px; width:100%; margin:0 auto; scroll-behavior:smooth; }
+    .row { display:flex; gap:10px; align-items:flex-end; animation:rise .18s ease-out; }
+    .row.me { flex-direction:row-reverse; }
+    @keyframes rise { from { opacity:0; transform:translateY(6px);} to { opacity:1; transform:none;} }
+    .avatar { width:28px; height:28px; border-radius:9px; flex:0 0 28px; display:grid;
+              place-items:center; font-size:14px; user-select:none; }
+    .avatar.bot { background:linear-gradient(135deg,var(--me1),var(--me2)); }
+    .avatar.usr { background:#2b3245; font-weight:700; font-size:12.5px; color:#c7d2fe; }
+    .bubble { padding:10px 14px; border-radius:var(--r-lg); max-width:76%;
+              white-space:pre-wrap; word-wrap:break-word; }
+    .row.me  .bubble { background:linear-gradient(135deg,var(--me1),var(--me2)); color:#fff;
+                       border-bottom-right-radius:var(--r-sm); }
+    .row.bot .bubble { background:var(--panel-2); border:1px solid var(--line);
+                       border-bottom-left-radius:var(--r-sm); }
+    .bubble strong { font-weight:700; color:#fff; }
+    .bubble em { color:#cdd3e1; }
+    .bubble code { background:rgba(255,255,255,.08); padding:1px 5px; border-radius:4px;
+                   font:13px ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .bubble.streaming::after { content:"▍"; margin-left:2px; color:var(--mut);
+                               animation:blink 1s steps(1) infinite; }
+    @keyframes blink { 50% { opacity:0; } }
+
+    .meta-row { display:flex; gap:8px; align-items:center; margin-top:7px; }
+    .tag { font-size:10.5px; padding:2px 8px; border-radius:999px; font-weight:600; }
+    .tag.cache { background:rgba(74,222,128,.14); color:var(--accent); }
+    .tag.llm { background:rgba(96,165,250,.14); color:#93c5fd; }
+    .tag.blocked { background:rgba(251,191,36,.14); color:#fbbf24; }
+    .time { font-size:10.5px; color:var(--mut); }
+
+    /* tool-progress status inside a pending bubble */
+    .tstatus { color:var(--mut); font-size:11.5px; font-style:italic; margin-top:6px;
+               animation:pulse 1.6s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity:.55; } }
+    .retry { margin-top:8px; background:var(--panel-2); border:1px solid var(--line);
+             color:#93c5fd; border-radius:8px; padding:4px 12px; font-size:12px; cursor:pointer; }
+
+    /* typing indicator */
+    .dots { display:inline-flex; gap:4px; padding:4px 2px; }
+    .dots span { width:6px; height:6px; border-radius:50%; background:var(--mut);
+                 animation:bob 1.2s infinite; }
+    .dots span:nth-child(2){ animation-delay:.15s; } .dots span:nth-child(3){ animation-delay:.3s; }
+    @keyframes bob { 0%,60%,100% { transform:none; opacity:.45; } 30% { transform:translateY(-4px); opacity:1; } }
+
+    /* suggestion chips */
+    #suggest { display:flex; flex-wrap:wrap; gap:8px; max-width:860px; width:100%;
+               margin:0 auto; padding:0 20px 6px; }
+    #suggest button { background:var(--panel); border:1px solid var(--line); color:#c3c9d8;
+                      border-radius:999px; padding:7px 13px; font-size:12.5px; cursor:pointer;
+                      transition:border-color .15s, transform .1s; }
+    #suggest button:hover { border-color:var(--me1); transform:translateY(-1px); }
+
+    /* ---------- composer ---------- */
+    .composer { max-width:860px; width:100%; margin:0 auto; padding:10px 20px 6px; }
+    form { display:flex; gap:10px; align-items:flex-end; background:var(--panel);
+           border:1px solid var(--line); border-radius:14px; padding:8px;
+           transition:border-color .15s; }
+    form:focus-within { border-color:var(--me1); }
+    #box { flex:1; background:transparent; border:0; color:var(--txt); padding:8px 8px;
+           font-size:15px; resize:none; max-height:160px; }
+    #box:focus { outline:none; }
+    #send { border:0; border-radius:10px; padding:10px 18px; font-size:14.5px; font-weight:600;
+            color:#fff; cursor:pointer; background:linear-gradient(135deg,var(--me1),var(--me2)); }
+    #send.stop { background:#3a3f4e; }
+    #send:disabled { opacity:.45; cursor:not-allowed; }
+    .hint { color:var(--mut); font-size:11.5px; text-align:center; padding:8px 0 12px; }
+    kbd { background:var(--panel); border:1px solid var(--line); border-bottom-width:2px;
+          border-radius:4px; padding:0 4px; font-size:10.5px; }
+
+    @media (max-width:640px) {
+      .bubble { max-width:86%; }
+      header { padding:10px 12px; }
+      .chip { display:none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">🛡️</div>
+    <div class="titles">
+      <h1>Achu FinBot</h1>
+      <div class="sub"><span class="dot"></span>Achu Bank · operations copilot</div>
+    </div>
+    <div class="spacer"></div>
+    <span class="chip" id="tenant">achu-bank</span>
+    <button class="hbtn" id="newchat" type="button" title="Start a fresh conversation">✚ New chat</button>
+    <button class="hbtn" id="dl" type="button" title="Download the full chat + diagnostics as JSON">⬇ JSON</button>
+  </header>
+
+  <div id="log" aria-live="polite"></div>
+
+  <div id="suggest"></div>
+
+  <div class="composer">
+    <form id="form">
+      <textarea id="box" rows="1" placeholder="Message Achu FinBot…"></textarea>
+      <button id="send" type="submit">Send</button>
+    </form>
+  </div>
+  <div class="hint"><kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line · streamed live, token by token</div>
+
+<script>
+  const log = document.getElementById('log');
+  const form = document.getElementById('form');
+  const box = document.getElementById('box');
+  const send = document.getElementById('send');
+  const dlBtn = document.getElementById('dl');
+  const newBtn = document.getElementById('newchat');
+  const suggest = document.getElementById('suggest');
+
+  // Conversation survives a page refresh: the id is persisted and history is
+  // restored from the server's chat memory (scoped to the JWT owner).
+  let conversationId = localStorage.getItem('achu-cid') || newCid();
+  localStorage.setItem('achu-cid', conversationId);
+  const history = [];
+  let busy = false;
+  let aborter = null;
+
+  const GREETING = "Hi — I'm Achu FinBot, Achu Bank's operations copilot. Ask me about " +
+    "policies, an account, a transaction, or a dispute — one box, no menus. (I can't move " +
+    "money — anything like a provisional credit goes to a human for approval.)";
+
+  const SUGGESTIONS = [
+    "What's the card dispute filing deadline?",
+    "Balance of ACC-1001",
+    "Recent transactions for ACC-1001",
+    "Customer disputes TXN-5001 as fraud — open a case",
+    "When is enhanced due diligence required?",
+  ];
+
+  function newCid() { return 'ui-' + Math.random().toString(36).slice(2); }
+
+  // Single identity: the JWT (signed claims — not spoofable) carries user, tenant
+  // and permissions; the backend authorizes every tool call from it.
+  let jwt = null;
+  async function token() {
+    if (jwt) return jwt;
+    const res = await fetch('/api/auth/token', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: 'priya', tenantId: 'achu-bank', role: 'disputes-analyst' })
+    });
+    jwt = (await res.json()).token;
+    return jwt;
+  }
+
+  // ---------- rendering ----------
+  function row(kind) {                       // kind: 'me' | 'bot'
+    const r = document.createElement('div');
+    r.className = 'row ' + kind;
+    const av = document.createElement('div');
+    av.className = 'avatar ' + (kind === 'me' ? 'usr' : 'bot');
+    av.textContent = kind === 'me' ? 'P' : '🛡️';
+    const b = document.createElement('div');
+    b.className = 'bubble';
+    r.appendChild(av); r.appendChild(b);
+    log.appendChild(r);
+    scrollIfNearBottom(true);
+    return b;
+  }
+
+  // Minimal, XSS-safe markdown: escape HTML FIRST, then bold / italic / inline-code.
+  // Newlines survive via white-space:pre-wrap.
+  function renderMarkdown(text) {
+    const esc = (text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return esc
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/`([^`]+?)`/g, '<code>$1</code>')
+      .replace(/(^|[^*])\*(?!\*)([^*]+?)\*(?!\*)/g, '$1<em>$2</em>');
+  }
+
+  function typing(bubble) {
+    bubble.innerHTML = '<span class="dots"><span></span><span></span><span></span></span>';
+  }
+
+  // Auto-scroll only when the reader is already near the bottom — never yank the
+  // view away from someone scrolled up re-reading an earlier answer.
+  function scrollIfNearBottom(force) {
+    const near = log.scrollHeight - log.scrollTop - log.clientHeight < 90;
+    if (near || force) log.scrollTop = log.scrollHeight;
+  }
+
+  function stamp(bubble, meta) {
+    const rowEl = document.createElement('div');
+    rowEl.className = 'meta-row';
+    if (meta) {
+      const kind = { cache: ['cache', '⚡ semantic cache'],
+                     blocked: ['blocked', '🛡️ scope guard'],
+                     unavailable: ['blocked', '⚠️ service busy'] }[meta.source] || ['llm', '🧠 LLM call'];
+      const tag = document.createElement('span');
+      tag.className = 'tag ' + kind[0];
+      tag.textContent = kind[1] + ' · ' + meta.elapsedMs + ' ms'
+        + (meta.source === 'cache' && meta.similarity != null ? ' · sim ' + meta.similarity.toFixed(3) : '');
+      rowEl.appendChild(tag);
+    }
+    const t = document.createElement('span');
+    t.className = 'time';
+    t.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    rowEl.appendChild(t);
+    bubble.appendChild(rowEl);
+  }
+
+  function resetChat() {
+    if (busy && aborter) aborter.abort();
+    conversationId = newCid();
+    localStorage.setItem('achu-cid', conversationId);
+    history.length = 0;
+    log.innerHTML = '';
+    const g = row('bot');
+    g.innerHTML = renderMarkdown(GREETING);
+    renderSuggestions();
+    box.focus();
+  }
+
+  async function restoreChat() {
+    try {
+      const r = await fetch('/api/assistant/history?conversationId=' + encodeURIComponent(conversationId),
+        { headers: { 'Authorization': 'Bearer ' + await token() } });
+      const msgs = r.ok ? await r.json() : [];
+      if (!msgs.length) { resetChat(); return; }
+      log.innerHTML = '';
+      for (const m of msgs) {
+        const b = row(m.role === 'user' ? 'me' : 'bot');
+        if (m.role === 'user') b.textContent = m.text;
+        else b.innerHTML = renderMarkdown(m.text);
+      }
+      box.focus();
+    } catch (e) { resetChat(); }
+  }
+
+  function renderSuggestions() {
+    suggest.innerHTML = '';
+    SUGGESTIONS.forEach(s => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = s;
+      b.onclick = () => { box.value = s; form.requestSubmit(); };
+      suggest.appendChild(b);
+    });
+  }
+
+  // ---------- composer behaviour ----------
+  box.addEventListener('input', () => {
+    box.style.height = 'auto'; box.style.height = Math.min(box.scrollHeight, 160) + 'px';
+  });
+  box.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!busy) form.requestSubmit(); }
+  });
+
+  newBtn.addEventListener('click', resetChat);
+
+  dlBtn.addEventListener('click', () => {
+    if (!history.length) { alert('No messages yet — ask something first.'); return; }
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      conversationId,
+      tenant: document.getElementById('tenant').textContent,
+      summary: {
+        turns: history.length,
+        llmCalls: history.filter(h => h.source === 'llm').length,
+        cacheHits: history.filter(h => h.source === 'cache').length,
+        avgLatencyMs: Math.round(history.reduce((s, h) => s + (h.elapsedMs || 0), 0) / history.length)
+      },
+      transcript: history
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'achu-finbot-chat-' + conversationId + '.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  async function callAssistant(text, signal) {
+    const opts = body => ({
+      method: 'POST', signal,
+      headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream',
+                 'Authorization': 'Bearer ' + body.tok },
+      body: JSON.stringify({ conversationId, message: text })
+    });
+    let res = await fetch('/api/assistant', opts({ tok: await token() }));
+    if (res.status === 401) {                 // expired token: refresh once and retry
+      jwt = null;
+      res = await fetch('/api/assistant', opts({ tok: await token() }));
+    }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return res;
+  }
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    if (busy) { if (aborter) aborter.abort(); return; }   // Stop button behaviour
+    const text = box.value.trim();
+    if (!text) return;
+
+    busy = true;
+    aborter = new AbortController();
+    suggest.innerHTML = '';                    // chips only make sense before the first turn
+    row('me').textContent = text;
+    box.value = ''; box.style.height = 'auto';
+    send.textContent = '◼ Stop'; send.classList.add('stop');
+    box.placeholder = 'Streaming… press Stop to cancel';
+
+    const bubble = row('bot');
+    typing(bubble);
+
+    let answer = '', meta = null;
+    try {
+      const res = await callAssistant(text, aborter.signal);
+      bubble.innerHTML = '';
+      bubble.classList.add('streaming');
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let sseBuf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        sseBuf += decoder.decode(value, { stream: true });
+        let sep;
+        while ((sep = sseBuf.indexOf('\n\n')) >= 0) {
+          const block = sseBuf.slice(0, sep); sseBuf = sseBuf.slice(sep + 2);
+          let ev = 'message', data = '';
+          for (const line of block.split('\n')) {
+            if (line.startsWith('event:')) ev = line.slice(6).trim();
+            else if (line.startsWith('data:')) data += line.slice(5).trim();
+          }
+          if (!data) continue;
+          const obj = JSON.parse(data);
+          if (ev === 'token') {
+            answer += obj.t;
+            bubble.innerHTML = renderMarkdown(answer);
+            scrollIfNearBottom(false);
+          } else if (ev === 'status' && !answer) {
+            // tool progress while the answer hasn't started: show what's happening
+            bubble.innerHTML = '<span class="dots"><span></span><span></span><span></span></span>'
+              + '<div class="tstatus">' + renderMarkdown(obj.s) + '</div>';
+            scrollIfNearBottom(false);
+          } else if (ev === 'meta') {
+            meta = obj;
+          }
+        }
+      }
+      bubble.classList.remove('streaming');
+      if (!answer && meta) { bubble.innerHTML = renderMarkdown(meta.answer || ''); }
+      stamp(bubble, meta);
+      history.push({
+        turn: history.length + 1, at: new Date().toISOString(), question: text,
+        answer: (meta && meta.answer) || answer,
+        source: meta ? meta.source : null, elapsedMs: meta ? meta.elapsedMs : null,
+        similarity: meta ? (meta.similarity ?? null) : null,
+        matchedQuestion: meta ? (meta.matchedQuestion ?? null) : null
+      });
+    } catch (err) {
+      bubble.classList.remove('streaming');
+      if (err.name === 'AbortError') {
+        bubble.innerHTML = renderMarkdown(answer) +
+          '<div class="meta-row"><span class="tag blocked">◼ stopped</span></div>';
+        history.push({ turn: history.length + 1, at: new Date().toISOString(),
+                       question: text, answer, source: 'stopped' });
+      } else {
+        bubble.textContent = 'Something went wrong: ' + err.message + '.';
+        const rb = document.createElement('button');
+        rb.className = 'retry'; rb.textContent = '↻ Retry';
+        rb.onclick = () => { box.value = text; form.requestSubmit(); };
+        bubble.appendChild(document.createElement('br'));
+        bubble.appendChild(rb);
+        history.push({ turn: history.length + 1, at: new Date().toISOString(),
+                       question: text, error: err.message });
+      }
+    } finally {
+      busy = false; aborter = null;
+      send.textContent = 'Send'; send.classList.remove('stop');
+      box.placeholder = 'Message Achu FinBot…';
+      scrollIfNearBottom(true);
+      box.focus();
+    }
+  });
+
+  restoreChat();
+</script>
+</body>
+</html>
