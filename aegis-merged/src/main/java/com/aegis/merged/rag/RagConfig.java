@@ -1,5 +1,6 @@
 package com.aegis.merged.rag;
 
+import com.aegis.merged.guardrails.GuardrailAdvisor;
 import com.aegis.merged.guardrails.TokenAuditAdvisor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
@@ -12,6 +13,13 @@ import org.springframework.context.annotation.Configuration;
  * A second ChatClient dedicated to grounded RAG answers. Kept separate from the
  * conversational copilot so its system prompt can enforce "answer only from
  * context, cite sources, refuse when context is empty".
+ *
+ * {@code guardrails} was missing here originally (CODE_REVIEW.md P0 #8) — /api/rag/ask and
+ * /api/rag/ask-advanced went straight to the model with no rate limit, no budget check, no
+ * injection screen, and no PII redaction, unlike AssistantController.stream which enforces all
+ * four manually (streaming bypasses CallAdvisor). Both RAG endpoints use ChatClient.call(),
+ * a plain CallAdvisor chain, so wiring the SAME GuardrailAdvisor bean here closes that gap
+ * with no per-endpoint duplication.
  */
 @Configuration
 public class RagConfig {
@@ -28,11 +36,13 @@ public class RagConfig {
 
     @Bean
     @Qualifier("ragClient")
-    ChatClient ragClient(ChatClient.Builder builder, TokenAuditAdvisor tokenAudit, ChatMemory chatMemory) {
+    ChatClient ragClient(ChatClient.Builder builder, TokenAuditAdvisor tokenAudit,
+                        GuardrailAdvisor guardrails, ChatMemory chatMemory) {
         return builder
                 .defaultSystem(RAG_SYSTEM_PROMPT)
                 .defaultAdvisors(
                         tokenAudit,
+                        guardrails,
                         // Conversation memory so same-tenant follow-ups keep context.
                         MessageChatMemoryAdvisor.builder(chatMemory).build())
                 .build();

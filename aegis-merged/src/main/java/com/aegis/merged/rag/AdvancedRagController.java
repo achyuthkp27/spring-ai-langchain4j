@@ -5,7 +5,9 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.rag.advisor.RetrievalAugmentationAdvisor;
 import org.springframework.ai.rag.preretrieval.query.transformation.RewriteQueryTransformer;
 import org.springframework.ai.rag.retrieval.search.VectorStoreDocumentRetriever;
+import com.aegis.merged.guardrails.GuardrailAdvisor;
 import com.aegis.merged.security.CurrentUser;
+import com.aegis.merged.security.Principal;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -53,7 +55,8 @@ public class AdvancedRagController {
     @PostMapping("/ask-advanced")
     public AskResponse ask(@RequestBody AskRequest request) {
         long start = System.nanoTime();
-        String tenantId = CurrentUser.get().tenantId();   // tenant from verified JWT
+        Principal principal = CurrentUser.get();          // identity from verified JWT
+        String tenantId = principal.tenantId();
 
         // 1. Semantic cache: a rephrased-but-equivalent question skips the LLM entirely.
         var hit = semanticCache.lookup(tenantId, request.question());
@@ -79,12 +82,16 @@ public class AdvancedRagController {
                 .documentRetriever(retriever)
                 .build();
 
-        // Memory is scoped per tenant+conversation so histories never cross tenants.
-        String memoryKey = tenantId + ":" + request.conversationId();
+        // Memory is scoped per tenant+USER+conversation, matching AssistantController's key
+        // shape exactly — without userId, two users of the same bank both posting
+        // conversationId "default" (the client's own default) read and continue each
+        // other's conversation history (CODE_REVIEW.md P0 #9).
+        String memoryKey = tenantId + ":" + principal.userId() + ":" + request.conversationId();
 
         String answer = ragClient.prompt()
                 .advisors(ragAdvisor)
-                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, memoryKey))
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, memoryKey)
+                        .param(GuardrailAdvisor.TENANT_PARAM, tenantId))
                 .user(request.question())
                 .call()
                 .content();

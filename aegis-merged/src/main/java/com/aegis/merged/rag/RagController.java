@@ -1,5 +1,6 @@
 package com.aegis.merged.rag;
 
+import com.aegis.merged.guardrails.GuardrailAdvisor;
 import com.aegis.merged.security.CurrentUser;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
@@ -57,6 +58,7 @@ public class RagController {
 
         String answer = ragClient.prompt()
                 .advisors(qaAdvisor)
+                .advisors(a -> a.param(GuardrailAdvisor.TENANT_PARAM, tenantId))
                 .user(request.question())
                 .call()
                 .content();
