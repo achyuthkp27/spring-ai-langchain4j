@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Aegis — Your Banking Assistant",
+  title: "Achu FinBot — Your Banking Assistant",
   description: "Customer self-service banking assistant",
 };
 

@@ -1,17 +1,20 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { motion } from "framer-motion";
-import { SendHorizonal } from "lucide-react";
+import clsx from "clsx";
+import { Plus, SendHorizonal } from "lucide-react";
 
 export function Composer({
   onSend,
+  onNewChat,
   disabled,
 }: {
   onSend: (text: string) => void;
+  onNewChat: () => void;
   disabled: boolean;
 }) {
   const [text, setText] = useState("");
+  const [focused, setFocused] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
 
   const submit = () => {
@@ -23,13 +26,27 @@ export function Composer({
   };
 
   return (
-    <div className="flex items-end gap-2 rounded-2xl border border-border-soft bg-surface p-2 shadow-sm focus-within:ring-2 focus-within:ring-accent/40 transition-shadow">
+    <div
+      className={clsx(
+        "flex items-end gap-2 rounded-full border bg-pill p-1.5 pl-2 backdrop-blur-sm transition-colors duration-150",
+        focused ? "border-accent/50" : "border-pill-border",
+      )}
+    >
+      <button
+        onClick={onNewChat}
+        aria-label="Start a new chat"
+        className="grid h-8 w-8 shrink-0 place-items-center self-center rounded-full bg-surface text-muted hover:text-foreground transition-colors"
+      >
+        <Plus size={16} />
+      </button>
       <textarea
         ref={ref}
         value={text}
         rows={1}
-        placeholder="Ask about your accounts, cards, or a charge…"
-        className="flex-1 resize-none bg-transparent px-2 py-1.5 text-[15px] outline-none placeholder:text-muted max-h-40"
+        placeholder="Chat here.."
+        className="flex-1 resize-none bg-transparent px-1 py-2 text-[15px] outline-none placeholder:text-muted max-h-40"
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         onChange={(e) => {
           setText(e.target.value);
           e.target.style.height = "auto";
@@ -42,16 +59,14 @@ export function Composer({
           }
         }}
       />
-      <motion.button
-        whileTap={{ scale: 0.9 }}
-        whileHover={{ scale: 1.06 }}
+      <button
         onClick={submit}
         disabled={disabled || !text.trim()}
         aria-label="Send"
-        className="grid h-9 w-9 place-items-center rounded-xl bg-accent text-white disabled:opacity-40 disabled:cursor-not-allowed"
+        className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent text-white transition-opacity hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed"
       >
-        <SendHorizonal size={16} />
-      </motion.button>
+        <SendHorizonal size={15} />
+      </button>
     </div>
   );
 }

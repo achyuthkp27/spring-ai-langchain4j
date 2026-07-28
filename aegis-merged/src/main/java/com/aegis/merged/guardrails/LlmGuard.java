@@ -1,8 +1,12 @@
 package com.aegis.merged.guardrails;
 
+import io.github.resilience4j.bulkhead.Bulkhead;
+import io.github.resilience4j.bulkhead.BulkheadConfig;
+import io.github.resilience4j.bulkhead.BulkheadFullException;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.reactor.bulkhead.operator.BulkheadOperator;
 import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOperator;
 import io.github.resilience4j.timelimiter.TimeLimiter;
 import io.github.resilience4j.timelimiter.TimeLimiterConfig;
@@ -23,17 +27,22 @@ import java.util.function.Supplier;
  * (the 1→100 stress test) calls queue and slow down. Without a guard a slow model pins
  * request threads until they exhaust the pool and the whole app stalls. This wraps every
  * model call in:
- *   - a TIME LIMITER (hard timeout, cancels the run) so no call hangs forever, and
+ *   - a TIME LIMITER (hard timeout, cancels the run) so no call hangs forever,
  *   - a CIRCUIT BREAKER that, once too many calls fail/are slow, "opens" and fails new
  *     calls instantly with a friendly message — shedding load so the app stays responsive
- *     and giving Ollama room to recover, instead of collapsing under a growing queue.
+ *     and giving Ollama room to recover, instead of collapsing under a growing queue, and
+ *   - a BULKHEAD capping concurrent calls at what Ollama can actually run in parallel
+ *     (OLLAMA_NUM_PARALLEL=2, per the model tuning notes) plus headroom — a burst beyond
+ *     that gets rejected immediately with the same friendly message instead of piling up
+ *     behind Ollama's own internal queue, where callers would otherwise wait indefinitely.
  */
 @Component
 public class LlmGuard {
 
     private static final Logger log = LoggerFactory.getLogger(LlmGuard.class);
 
-    /** Thrown when the breaker is open or a call times out; controllers turn this into a 1-liner. */
+    /** Thrown when the breaker is open, the bulkhead is full, or a call times out; controllers
+        turn this into a 1-liner. */
     public static class LlmUnavailableException extends RuntimeException {
         public LlmUnavailableException(String message) { super(message); }
     }
@@ -42,6 +51,7 @@ public class LlmGuard {
 
     private final CircuitBreaker breaker;
     private final TimeLimiter timeLimiter;
+    private final Bulkhead bulkhead;
     // Small pool just to host the timed future for the blocking path; Ollama serialises
     // anyway, so this only holds threads that are waiting, and the time limiter cancels them.
     private final ExecutorService pool = Executors.newFixedThreadPool(16, r -> {
@@ -65,20 +75,28 @@ public class LlmGuard {
                 .timeoutDuration(TIMEOUT)
                 .cancelRunningFuture(true)
                 .build());
+        this.bulkhead = Bulkhead.of("llm", BulkheadConfig.custom()
+                .maxConcurrentCalls(4)                       // Ollama runs 2 in parallel; headroom for queueing
+                .maxWaitDuration(Duration.ofSeconds(5))      // wait briefly for a slot, then reject
+                .build());
         this.breaker.getEventPublisher().onStateTransition(e ->
                 log.warn("llm.circuit state {} -> {}", e.getStateTransition().getFromState(),
                         e.getStateTransition().getToState()));
     }
 
-    /** Blocking call, guarded by circuit breaker + hard timeout. */
+    /** Blocking call, guarded by bulkhead + circuit breaker + hard timeout. */
     public <T> T call(Supplier<T> supplier) {
         Callable<T> timed = TimeLimiter.decorateFutureSupplier(timeLimiter,
                 () -> CompletableFuture.supplyAsync(supplier, pool));
-        Callable<T> guarded = CircuitBreaker.decorateCallable(breaker, timed);
+        Callable<T> breakerGuarded = CircuitBreaker.decorateCallable(breaker, timed);
+        Callable<T> guarded = Bulkhead.decorateCallable(bulkhead, breakerGuarded);
         try {
             return guarded.call();
         } catch (CallNotPermittedException e) {
             log.warn("llm.circuit.open rejected call");
+            throw new LlmUnavailableException("The assistant is busy right now. Please retry in a moment.");
+        } catch (BulkheadFullException e) {
+            log.warn("llm.bulkhead.full rejected call");
             throw new LlmUnavailableException("The assistant is busy right now. Please retry in a moment.");
         } catch (LlmUnavailableException e) {
             throw e;
@@ -88,9 +106,10 @@ public class LlmGuard {
         }
     }
 
-    /** Streaming variant: apply the same timeout + circuit breaker to a token Flux. */
+    /** Streaming variant: apply the same bulkhead + timeout + circuit breaker to a token Flux. */
     public <T> Flux<T> guard(Flux<T> source) {
         return source
+                .transformDeferred(BulkheadOperator.of(bulkhead))
                 .timeout(TIMEOUT)
                 .transformDeferred(CircuitBreakerOperator.of(breaker));
     }

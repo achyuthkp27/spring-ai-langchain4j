@@ -2,8 +2,14 @@
 # Port 8082 — 8080 = original aegis-ai, 8081 = aegis-lc4j.
 server:
   port: 8082
+  # Phase 4 (resilience): let in-flight requests (esp. a streaming SSE turn) finish instead
+  # of being cut off mid-response on deploy/restart.
+  shutdown: graceful
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
   application:
     name: aegis-merged
 
@@ -16,6 +22,11 @@ spring:
     url: jdbc:postgresql://localhost:5432/aegis
     username: aegis
     password: aegis
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
 
   ai:
     # Provider selection — the extension point for the Phase 2+ model router.
@@ -77,12 +88,34 @@ spring:
 aegis:
   llm:
     think: false   # Ollama ThinkOption — disable qwen3.5 reasoning mode
+  router:
+    enabled: true
+    escalation:
+      provider: ollama       # or anthropic (needs ANTHROPIC_API_KEY)
+      model: qwen3.5:9b      # or claude-sonnet-4-5 when provider=anthropic
+  redis:
+    # Externalizes RateLimiter/BudgetGuard so they hold under horizontal scaling (see
+    # config.RedisConfig). Off by default — single-instance deploys don't need it.
+    enabled: false
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info,metrics,prometheus
+  # Phase 4 (resilience): k8s-style split health checks — readiness (safe to route traffic
+  # to) vs liveness (safe to keep running) are different questions; a DB hiccup should fail
+  # readiness without triggering a container restart that wouldn't fix it.
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when-authorized
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
   metrics:
     tags:
       application: aegis-merged
@@ -148,3 +181,19 @@ spring:
     vectorstore:
       pgvector:
         dimensions: 1536
+
+---
+# Phase 4 (resilience) + Phase 2 (secrets): activate alongside a real chat/embedding profile,
+# e.g. --spring.profiles.active=anthropic,openai-embeddings,prod. Structured JSON logs are what
+# a real log pipeline (Datadog/Grafana Loki/ELK) actually wants — human-readable console output
+# is a dev-only convenience this profile deliberately gives up. JwtService also refuses to
+# start under this profile with the default JWT secret (see that class) rather than just
+# warning, since "prod" is the one place that gap can't ship silently.
+spring:
+  config:
+    activate:
+      on-profile: prod
+logging:
+  structured:
+    format:
+      console: ecs

@@ -1,8 +1,14 @@
 /Users/achyuthkp/notionn/aegis-merged/src/test/java/com/aegis/merged/AegisAiApplicationTests.java
+/Users/achyuthkp/notionn/aegis-merged/src/test/java/com/aegis/merged/assistant/ModelRouterTest.java
+/Users/achyuthkp/notionn/aegis-merged/src/test/java/com/aegis/merged/assistant/TenantNamesTest.java
 /Users/achyuthkp/notionn/aegis-merged/src/test/java/com/aegis/merged/assistant/ThinkTagFilterTest.java
 /Users/achyuthkp/notionn/aegis-merged/src/test/java/com/aegis/merged/evals/AccuracyEvalTest.java
 /Users/achyuthkp/notionn/aegis-merged/src/test/java/com/aegis/merged/evals/RagEvaluationTest.java
 /Users/achyuthkp/notionn/aegis-merged/src/test/java/com/aegis/merged/guardrails/GuardrailsOwaspTest.java
 /Users/achyuthkp/notionn/aegis-merged/src/test/java/com/aegis/merged/guardrails/LlmGuardTest.java
 /Users/achyuthkp/notionn/aegis-merged/src/test/java/com/aegis/merged/guardrails/RateLimiterTest.java
+/Users/achyuthkp/notionn/aegis-merged/src/test/java/com/aegis/merged/guardrails/RedisGuardrailsTest.java
 /Users/achyuthkp/notionn/aegis-merged/src/test/java/com/aegis/merged/rag/SemanticCacheGuardTest.java
+/Users/achyuthkp/notionn/aegis-merged/src/test/java/com/aegis/merged/security/CurrentUserTest.java
+/Users/achyuthkp/notionn/aegis-merged/src/test/java/com/aegis/merged/security/JwtServiceTest.java
+/Users/achyuthkp/notionn/aegis-merged/src/test/java/com/aegis/merged/tools/BankingToolsTest.java

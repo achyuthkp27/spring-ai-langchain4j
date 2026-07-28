@@ -62,10 +62,27 @@ public class PolicySearchTool {
                 principal.userId(), tenantId, results == null ? 0 : results.size());
 
         if (results == null || results.isEmpty()) {
+            BankingTools.markFailed(ctx);
             return "No matching policy passages found.";
         }
+
+        // Dedupe by source (several chunks often come from the same document) so the
+        // citation chip row stays compact — keep the first (highest-ranked) snippet per doc.
+        var citations = new java.util.LinkedHashMap<String, BankingTools.Citation>();
+        for (var d : results) {
+            String source = String.valueOf(d.getMetadata().getOrDefault("source", "?"));
+            citations.putIfAbsent(source, new BankingTools.Citation(source, snippet(d.getText())));
+        }
+        BankingTools.emitCitations(ctx, java.util.List.copyOf(citations.values()));
+
         return results.stream()
                 .map(d -> "- (" + d.getMetadata().getOrDefault("source", "?") + ") " + d.getText())
                 .collect(Collectors.joining("\n"));
+    }
+
+    private static String snippet(String text) {
+        if (text == null) return "";
+        String t = text.strip();
+        return t.length() > 160 ? t.substring(0, 160) + "…" : t;
     }
 }

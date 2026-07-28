@@ -32,13 +32,20 @@ public class SecurityConfig {
                         // an already-committed response and reset the stream. The request
                         // is fully authorized on REQUEST; the continuation needs no re-check.
                         .shouldFilterAllDispatcherTypes(false)
-                        // Public: the UIs, dev login, health, and (POC) the MCP transport.
-                        // (admin.html is a static shell — every API it calls needs an admin JWT.)
+                        // Public: the UIs, dev login, health. (admin.html is a static shell —
+                        // every API it calls needs an admin JWT.)
                         .requestMatchers("/", "/index.html", "/admin.html", "/api/auth/**",
-                                "/actuator/health/**", "/actuator/prometheus").permitAll()
-                        // MCP endpoints are permitted for the POC; production hardening =
-                        // OAuth2 on MCP (deferred — needs client-side OAuth support). See README.
-                        .requestMatchers("/sse", "/mcp/**").permitAll()
+                                "/actuator/health/**",
+                                "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
+                        // MCP transport: PolicyTools.searchPolicies takes tenantId as an
+                        // explicit caller-supplied param (by design, for org-wide cross-tenant
+                        // discovery by trusted agents) — an unauthenticated caller must not
+                        // reach it at all, so any valid JWT (not a specific tenant/role) gates
+                        // the transport itself rather than the individual tool.
+                        .requestMatchers("/sse", "/mcp/**").authenticated()
+                        // Token spend is tagged by tenant (see TokenAuditAdvisor) — public
+                        // metrics would let anyone enumerate the tenant list and their spend.
+                        .requestMatchers("/actuator/prometheus").hasAuthority("PERM_admin:all")
                         // All admin APIs (analytics, budget, circuit, ingest, cache) need
                         // the admin permission from a verified JWT.
                         .requestMatchers("/api/admin/**").hasAuthority("PERM_admin:all")

@@ -1,9 +1,14 @@
 com/aegis/merged/rag/SemanticCacheGuardTest.class
 com/aegis/merged/guardrails/RateLimiterTest.class
 com/aegis/merged/AegisMergedApplicationTests.class
+com/aegis/merged/assistant/TenantNamesTest.class
 com/aegis/merged/evals/AccuracyEvalTest$Golden.class
-com/aegis/merged/assistant/ThinkTagFilterTest.class
+com/aegis/merged/assistant/ModelRouterTest.class
 com/aegis/merged/guardrails/GuardrailsOwaspTest.class
-com/aegis/merged/guardrails/LlmGuardTest.class
+com/aegis/merged/tools/BankingToolsTest.class
 com/aegis/merged/evals/RagEvaluationTest.class
+com/aegis/merged/guardrails/RedisGuardrailsTest.class
 com/aegis/merged/evals/AccuracyEvalTest.class
+com/aegis/merged/security/JwtServiceTest.class
+com/aegis/merged/assistant/ThinkTagFilterTest.class
+com/aegis/merged/guardrails/LlmGuardTest.class

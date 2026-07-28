@@ -1,4 +1,18 @@
 services:
+  # Only started when aegis.redis.enabled=true (see config.RedisConfig). NOT auto-started
+  # by spring-boot-docker-compose — spring.docker.compose.enabled=false, same as postgres
+  # below, since this app shares aegis-lc4j's already-running Postgres. Start manually:
+  #   docker compose up -d redis
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   postgres:
     # pgvector image = Postgres 16 + the `vector` extension (superset of plain PG).
     # Serves both conversation memory (JDBC) and RAG embeddings (Phase 1).

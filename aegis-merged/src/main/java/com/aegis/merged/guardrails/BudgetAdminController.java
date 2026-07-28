@@ -31,7 +31,11 @@ public class BudgetAdminController {
 
     @PostMapping
     public Map<String, Object> set(@RequestBody SetBudgetRequest req) {
-        budget.setBudget(req.tenantId(), req.budget());
-        return Map.of("status", "ok", "tenantId", req.tenantId(), "budget", req.budget());
+        String tenantId = CurrentUser.requireTenantAccess(req.tenantId());
+        if (req.budget() < 0) {
+            throw new IllegalArgumentException("budget must not be negative");
+        }
+        budget.setBudget(tenantId, req.budget());
+        return Map.of("status", "ok", "tenantId", tenantId, "budget", req.budget());
     }
 }

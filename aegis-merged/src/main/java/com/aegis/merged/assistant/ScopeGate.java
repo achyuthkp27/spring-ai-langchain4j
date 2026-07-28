@@ -66,9 +66,12 @@ public class ScopeGate {
             IN scope: the customer's accounts, balances, transactions, disputes,
             chargebacks, cards, payments, transfers, loans, mortgages, fees, interest
             rates, overdrafts, foreign exchange, online banking, complaints, this bank's
-            policies, and greetings or questions about the assistant itself.
-            OUT of scope: general knowledge, philosophy, coding or programming, math help,
-            investment/trading/financial advice, or anything not about this bank's operations.
+            policies, greetings or questions about the assistant itself, AND plain-language
+            explanations of banking or personal-finance concepts (e.g. "what is banking",
+            "what is APR", "what does overdraft mean", "what is a dispute").
+            OUT of scope: general knowledge unrelated to banking/finance (history, science,
+            trivia), philosophy, coding or programming, math help, investment/trading/stock
+            advice, or anything not about banking or this bank's operations.
 
             The new message may be a SHORT FOLLOW-UP ("the 3rd one", "yes", "that account")
             that only makes sense given the recent conversation shown to you — if the thread

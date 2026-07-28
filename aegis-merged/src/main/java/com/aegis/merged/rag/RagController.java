@@ -38,6 +38,12 @@ public class RagController {
     public AskResponse ask(@RequestBody AskRequest request) {
         // Tenant comes from the verified JWT claim, never from user input.
         String tenantId = CurrentUser.get().tenantId();
+        // Typed builder, NOT string concatenation — see PolicySearchTool/PolicyTools for the
+        // exact same pattern and its rationale. tenantId is a JWT claim so this is defense in
+        // depth rather than the only barrier, but a hand-built "tenantId == '" + tenantId + "'"
+        // string is a filter-injection sink the moment that assumption is wrong even once.
+        var filter = new org.springframework.ai.vectorstore.filter.FilterExpressionBuilder()
+                .eq("tenantId", tenantId).build();
         var qaAdvisor = QuestionAnswerAdvisor.builder(vectorStore)
                 .searchRequest(SearchRequest.builder()
                         .topK(6)
@@ -45,7 +51,7 @@ public class RagController {
                         // a lenient threshold improves recall. Tenant isolation is
                         // unaffected — the filter is a hard SQL WHERE, not a similarity knob.
                         .similarityThreshold(0.1)
-                        .filterExpression("tenantId == '" + tenantId + "'")
+                        .filterExpression(filter)
                         .build())
                 .build();
 

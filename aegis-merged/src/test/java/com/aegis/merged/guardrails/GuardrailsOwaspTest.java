@@ -3,6 +3,8 @@ package com.aegis.merged.guardrails;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.Optional;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -13,7 +15,7 @@ class GuardrailsOwaspTest {
 
     private final PiiRedactor pii = new PiiRedactor();
     private final InjectionScreen injection = new InjectionScreen();
-    private final BudgetGuard budget = new BudgetGuard();
+    private final BudgetGuard budget = new BudgetGuard(Optional.empty());
 
     @Test
     @DisplayName("LLM01 Prompt Injection — attack corpus is all flagged, benign is not")

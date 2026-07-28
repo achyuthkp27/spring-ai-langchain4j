@@ -11,6 +11,31 @@
   --accent: #2563eb;
   --accent-soft: #dbeafe;
   --muted: #6b7280;
+  /* System-side identity tint (escalation/reasoning) — distinct from --accent (the
+     user's own messages). Close to accent under deuteranopia by hue math alone, so it's
+     ALWAYS paired with a distinct icon + label (Sparkles vs Loader2, different status
+     text), per the dataviz skill's rule for colors that share a status/identity role:
+     never color alone. */
+  --system: #7c3aed;
+  --system-soft: #ede9fe;
+  /* Fixed status palette (validated via dataviz skill's validate_palette.js against
+     this app's surfaces) — same hex in both modes by design, not themed. On the light
+     surface "warning" is intentionally sub-3:1 as text; only ever used as an ICON color
+     paired with muted-ink text + a text label, never as the text color itself. */
+  --good: #0ca30c;
+  --good-soft: #d1fae5;
+  --warning: #fab219;
+  --warning-soft: #fef3c7;
+  --critical: #d03b3b;
+  --critical-soft: #fee2e2;
+  /* Soft pastel page wash + frosted pill surface — the warm, colorful reference direction
+     (vs. the earlier flat-monochrome pass): a gentle lavender-to-blue gradient behind
+     everything, with nav/search/composer sitting as translucent "pill" surfaces on top
+     rather than opaque cards. */
+  --wash-a: #e9e6fb;
+  --wash-b: #e3edfb;
+  --pill: rgba(255, 255, 255, 0.55);
+  --pill-border: rgba(255, 255, 255, 0.6);
 }
 
 .dark {
@@ -22,6 +47,18 @@
   --accent: #60a5fa;
   --accent-soft: #1e3a5f;
   --muted: #8b93a3;
+  --system: #c4b5fd;
+  --system-soft: #2e1f4d;
+  --good: #0ca30c;
+  --good-soft: #123528;
+  --warning: #fab219;
+  --warning-soft: #3d2c0c;
+  --critical: #d03b3b;
+  --critical-soft: #3d1414;
+  --wash-a: #241c3d;
+  --wash-b: #16233a;
+  --pill: rgba(255, 255, 255, 0.06);
+  --pill-border: rgba(255, 255, 255, 0.09);
 }
 
 @theme inline {
@@ -33,6 +70,16 @@
   --color-accent: var(--accent);
   --color-accent-soft: var(--accent-soft);
   --color-muted: var(--muted);
+  --color-system: var(--system);
+  --color-system-soft: var(--system-soft);
+  --color-good: var(--good);
+  --color-good-soft: var(--good-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-critical: var(--critical);
+  --color-critical-soft: var(--critical-soft);
+  --color-pill: var(--pill);
+  --color-pill-border: var(--pill-border);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -43,9 +90,19 @@ body {
 }
 
 body {
-  background: var(--background);
+  background: linear-gradient(135deg, var(--wash-a), var(--wash-b));
+  background-attachment: fixed;
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  /* Smooth cross-fade on theme toggle instead of an instant flip. */
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Tight, precise heading tracking — the one typographic signature that reads as
+   "engineered" rather than "templated" (Linear/Vercel's shared trait). */
+h1, h2, h3 {
+  letter-spacing: -0.01em;
 }
 
 /* Streaming caret */
@@ -85,6 +142,30 @@ body {
   padding: 0.1em 0.35em;
   font-family: var(--font-mono), monospace;
   font-size: 0.85em;
+}
+.prose-chat pre {
+  margin: 0.5rem 0;
+  padding: 0.75rem 0.9rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow-x: auto;
+}
+.prose-chat pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.82em;
+  line-height: 1.55;
+}
+.prose-chat blockquote {
+  margin: 0.4rem 0;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--accent);
+  color: var(--muted);
+}
+.prose-chat a {
+  color: var(--accent);
+  text-underline-offset: 2px;
 }
 .prose-chat strong {
   font-weight: 600;
