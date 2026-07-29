@@ -1,5 +1,6 @@
 package com.aegis.merged.assistant;
 
+import com.aegis.merged.admin.AuditTrail;
 import com.aegis.merged.security.AccessDeniedException;
 import com.aegis.merged.security.Principal;
 import com.aegis.merged.tools.BankingTools;
@@ -10,8 +11,11 @@ import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.stereotype.Component;
 
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.stream.Collectors;
 
 @Component
@@ -19,9 +23,9 @@ public class PolicySearchTool {
 
     private static final Logger log = LoggerFactory.getLogger(PolicySearchTool.class);
     private final VectorStore vectorStore;
-    private final com.aegis.merged.admin.AuditTrail audit;
+    private final AuditTrail audit;
 
-    public PolicySearchTool(VectorStore vectorStore, com.aegis.merged.admin.AuditTrail audit) {
+    public PolicySearchTool(VectorStore vectorStore, AuditTrail audit) {
         this.vectorStore = vectorStore;
         this.audit = audit;
     }
@@ -40,8 +44,7 @@ public class PolicySearchTool {
         audit.toolCalled("searchPolicies", tenantId);
         BankingTools.status(ctx, "Searching policy documents…");
 
-        var filter = new org.springframework.ai.vectorstore.filter.FilterExpressionBuilder()
-                .eq("tenantId", tenantId).build();
+        var filter = new FilterExpressionBuilder().eq("tenantId", tenantId).build();
         var results = vectorStore.similaritySearch(SearchRequest.builder()
                 .query(query)
                 .topK(6)                      

@@ -6,10 +6,12 @@ import org.springframework.ai.document.Document;
 import org.springframework.ai.reader.markdown.MarkdownDocumentReader;
 import org.springframework.ai.reader.markdown.config.MarkdownDocumentReaderConfig;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
+import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -29,19 +31,15 @@ public class IngestionService {
         this.semanticCache = semanticCache;
     }
 
+    @Transactional
     public int ingestAll() {
-
         semanticCache.clear();
 
-        try {
-            var all = vectorStore.similaritySearch(org.springframework.ai.vectorstore.SearchRequest.builder()
-                    .query("*").topK(10_000).similarityThreshold(0.0).build());
-            if (all != null && !all.isEmpty()) {
-                vectorStore.delete(all.stream().map(org.springframework.ai.document.Document::getId).toList());
-                log.info("ingest cleared existing chunks={}", all.size());
-            }
-        } catch (Exception e) {
-            log.warn("ingest clear step skipped: {}", e.getMessage());
+        var all = vectorStore.similaritySearch(SearchRequest.builder()
+                .query("*").topK(10_000).similarityThreshold(0.0).build());
+        if (all != null && !all.isEmpty()) {
+            vectorStore.delete(all.stream().map(Document::getId).toList());
+            log.info("ingest cleared existing chunks={}", all.size());
         }
         var resolver = new PathMatchingResourcePatternResolver();
         int total = 0;

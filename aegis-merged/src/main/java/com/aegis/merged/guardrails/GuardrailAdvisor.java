@@ -6,9 +6,14 @@ import org.springframework.ai.chat.client.ChatClientRequest;
 import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.client.advisor.api.CallAdvisor;
 import org.springframework.ai.chat.client.advisor.api.CallAdvisorChain;
+import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
 
 @Component
 public class GuardrailAdvisor implements CallAdvisor {
@@ -111,9 +116,9 @@ public class GuardrailAdvisor implements CallAdvisor {
     }
 
     private ChatClientResponse refusal(ChatClientRequest request, String message) {
-        var assistant = new org.springframework.ai.chat.messages.AssistantMessage(message);
-        var gen = new org.springframework.ai.chat.model.Generation(assistant);
-        var chatResponse = new org.springframework.ai.chat.model.ChatResponse(java.util.List.of(gen));
+        var assistant = new AssistantMessage(message);
+        var gen = new Generation(assistant);
+        var chatResponse = new ChatResponse(List.of(gen));
         return ChatClientResponse.builder()
                 .chatResponse(chatResponse)
                 .context(request.context())

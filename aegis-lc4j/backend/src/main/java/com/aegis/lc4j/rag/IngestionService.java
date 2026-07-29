@@ -72,7 +72,6 @@ public class IngestionService {
         return total;
     }
 
-    /** Directly add a chunk for a tenant (used by tenant-isolation tests). */
     public void add(String tenantId, String docType, String text) {
         TextSegment segment = TextSegment.from(text, Metadata.from(Map.of(
                 "tenantId", tenantId, "docType", docType, "source", "adhoc")));

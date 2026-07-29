@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
@@ -43,7 +44,7 @@ public class JwtService {
                 : Arrays.stream(knownTenantsCsv.split(","))
                         .map(String::trim).filter(s -> !s.isEmpty())
                         .collect(Collectors.toUnmodifiableSet());
-        boolean prod = env.acceptsProfiles(org.springframework.core.env.Profiles.of("prod"));
+        boolean prod = env.acceptsProfiles(Profiles.of("prod"));
 
         if (prod && (usingDefaultSecret || secret.getBytes(StandardCharsets.UTF_8).length < MIN_SECRET_BYTES)) {
             throw new IllegalStateException(

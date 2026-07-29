@@ -79,7 +79,6 @@ public class IngestionService {
         return total;
     }
 
-    /** Directly add a document for a tenant (used by tenant-isolation tests). */
     public void add(String tenantId, String docType, String text) {
         var doc = new Document(text, Map.of("tenantId", tenantId, "docType", docType, "source", "adhoc"));
         vectorStore.add(List.of(doc));

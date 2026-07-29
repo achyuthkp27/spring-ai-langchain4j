@@ -5,6 +5,8 @@ import com.aegis.merged.security.CurrentUser;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
 import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -16,10 +18,10 @@ import org.springframework.web.bind.annotation.RestController;
 public class RagController {
 
     private final ChatClient ragClient;
-    private final org.springframework.ai.vectorstore.VectorStore vectorStore;
+    private final VectorStore vectorStore;
 
     public RagController(@Qualifier("ragClient") ChatClient ragClient,
-                         org.springframework.ai.vectorstore.VectorStore vectorStore) {
+                         VectorStore vectorStore) {
         this.ragClient = ragClient;
         this.vectorStore = vectorStore;
     }
@@ -32,17 +34,13 @@ public class RagController {
 
     @PostMapping("/ask")
     public AskResponse ask(@RequestBody AskRequest request) {
-        
         var principal = CurrentUser.get();
         String tenantId = principal.tenantId();
 
-        var filter = new org.springframework.ai.vectorstore.filter.FilterExpressionBuilder()
-                .eq("tenantId", tenantId).build();
+        var filter = new FilterExpressionBuilder().eq("tenantId", tenantId).build();
         var qaAdvisor = QuestionAnswerAdvisor.builder(vectorStore)
                 .searchRequest(SearchRequest.builder()
                         .topK(6)
-                        // Local embedding models (nomic) score lower than hosted ones;
-
                         .similarityThreshold(0.1)
                         .filterExpression(filter)
                         .build())

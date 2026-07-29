@@ -8,6 +8,8 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.MessageType;
+import org.springframework.ai.ollama.api.OllamaChatOptions;
+import org.springframework.ai.ollama.api.ThinkOption;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -83,10 +85,9 @@ public class ScopeGate {
 
         ChatOptions options;
         if (think != null && !think.isBlank()) {
-            var b = org.springframework.ai.ollama.api.OllamaChatOptions.builder()
+            var b = OllamaChatOptions.builder()
                     .temperature(0.0).numPredict(4)
-                    .thinkOption(new org.springframework.ai.ollama.api.ThinkOption.ThinkBoolean(
-                            Boolean.parseBoolean(think)));
+                    .thinkOption(new ThinkOption.ThinkBoolean(Boolean.parseBoolean(think)));
             if (classifierModel != null && !classifierModel.isBlank()) b.model(classifierModel);
             options = b.build();
         } else {

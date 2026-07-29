@@ -9,6 +9,7 @@ import com.aegis.merged.guardrails.GuardrailAdvisor;
 import com.aegis.merged.security.CurrentUser;
 import com.aegis.merged.security.Principal;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -48,7 +49,7 @@ public class AdvancedRagController {
     @PostMapping("/ask-advanced")
     public AskResponse ask(@RequestBody AskRequest request) {
         long start = System.nanoTime();
-        Principal principal = CurrentUser.get();          
+        Principal principal = CurrentUser.get();
         String tenantId = principal.tenantId();
 
         var hit = semanticCache.lookup(tenantId, request.question());
@@ -61,10 +62,7 @@ public class AdvancedRagController {
                 .vectorStore(vectorStore)
                 .topK(6)
                 .similarityThreshold(0.1)
-                
-                .filterExpression(() ->
-                        new org.springframework.ai.vectorstore.filter.FilterExpressionBuilder()
-                                .eq("tenantId", tenantId).build())
+                .filterExpression(() -> new FilterExpressionBuilder().eq("tenantId", tenantId).build())
                 .build();
 
         var ragAdvisor = RetrievalAugmentationAdvisor.builder()

@@ -17,6 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
@@ -115,16 +116,16 @@ public class AssistantController {
         }
 
         long assistantCountInWindow = messages.stream()
-                .filter(m -> m.getMessageType() == org.springframework.ai.chat.messages.MessageType.ASSISTANT)
+                .filter(m -> m.getMessageType() == MessageType.ASSISTANT)
                 .count();
         int assistantSeq = widgetHistoryStore.currentTurnSeq(memoryKey) - (int) assistantCountInWindow;
 
         List<HistoryMessage> out = new ArrayList<>();
         for (var m : messages) {
             var type = m.getMessageType();
-            if (type == org.springframework.ai.chat.messages.MessageType.USER) {
+            if (type == MessageType.USER) {
                 out.add(new HistoryMessage("user", m.getText() == null ? "" : m.getText(), List.of()));
-            } else if (type == org.springframework.ai.chat.messages.MessageType.ASSISTANT) {
+            } else if (type == MessageType.ASSISTANT) {
                 assistantSeq++;
                 List<WidgetEvent> widgets = new ArrayList<>();
                 for (var row : byTurn.getOrDefault(assistantSeq, List.of())) {
