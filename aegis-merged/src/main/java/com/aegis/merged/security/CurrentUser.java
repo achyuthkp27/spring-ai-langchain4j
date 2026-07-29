@@ -12,7 +12,7 @@ public final class CurrentUser {
         if (auth != null && auth.getPrincipal() instanceof Principal p) {
             return p;
         }
-        throw new AccessDeniedException("No authenticated user");
+        throw new UnauthenticatedException("No authenticated user");
     }
 
     public static String requireTenantAccess(String requestedTenant) {

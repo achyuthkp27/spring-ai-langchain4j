@@ -173,7 +173,9 @@ export function Sidebar({
                         className="opacity-0 group-hover:opacity-100 text-muted hover:text-critical transition-opacity"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onRemove(c.id);
+                          if (window.confirm(`Delete "${c.title}"? This can't be undone.`)) {
+                            onRemove(c.id);
+                          }
                         }}
                       >
                         <Trash2 size={13} />

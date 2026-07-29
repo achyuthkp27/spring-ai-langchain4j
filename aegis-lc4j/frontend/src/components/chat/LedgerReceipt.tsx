@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { motion } from "framer-motion";
 import clsx from "clsx";
 import { ArrowRight } from "lucide-react";
@@ -8,7 +9,7 @@ import type { LedgerEntryData } from "@/lib/sse";
 const money = (n: number) =>
   n.toLocaleString(undefined, { style: "currency", currency: "USD" });
 
-export function LedgerReceipt({ entries }: { entries: LedgerEntryData[] }) {
+export const LedgerReceipt = memo(function LedgerReceipt({ entries }: { entries: LedgerEntryData[] }) {
   if (entries.length === 0) return null;
   const debit = entries.find((e) => e.direction === "DEBIT");
   const credit = entries.find((e) => e.direction === "CREDIT");
@@ -55,4 +56,4 @@ export function LedgerReceipt({ entries }: { entries: LedgerEntryData[] }) {
       </div>
     </motion.div>
   );
-}
+});

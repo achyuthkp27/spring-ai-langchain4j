@@ -4,6 +4,7 @@ import com.aegis.merged.guardrails.GuardrailAdvisor;
 import com.aegis.merged.security.CurrentUser;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
@@ -26,7 +27,12 @@ public class RagController {
         this.vectorStore = vectorStore;
     }
 
-    public record AskRequest(String question) {
+    public record AskRequest(String conversationId, String question) {
+        public AskRequest {
+            if (conversationId == null || conversationId.isBlank()) {
+                conversationId = "default";
+            }
+        }
     }
 
     public record AskResponse(String tenantId, String answer) {
@@ -36,6 +42,7 @@ public class RagController {
     public AskResponse ask(@RequestBody AskRequest request) {
         var principal = CurrentUser.get();
         String tenantId = principal.tenantId();
+        String memoryKey = tenantId + ":" + principal.userId() + ":" + request.conversationId();
 
         var filter = new FilterExpressionBuilder().eq("tenantId", tenantId).build();
         var qaAdvisor = QuestionAnswerAdvisor.builder(vectorStore)
@@ -48,7 +55,8 @@ public class RagController {
 
         String answer = ragClient.prompt()
                 .advisors(qaAdvisor)
-                .advisors(a -> a.param(GuardrailAdvisor.TENANT_PARAM, tenantId)
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, memoryKey)
+                        .param(GuardrailAdvisor.TENANT_PARAM, tenantId)
                         .param(GuardrailAdvisor.USER_PARAM, principal.userId()))
                 .user(request.question())
                 .call()

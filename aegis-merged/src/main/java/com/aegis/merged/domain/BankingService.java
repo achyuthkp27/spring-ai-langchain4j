@@ -46,6 +46,7 @@ public class BankingService {
 
     private final Map<String, Account> accounts = new ConcurrentHashMap<>();
     private final Map<String, List<Transaction>> txns = new ConcurrentHashMap<>();
+    private final Map<String, Transaction> txnIndex = new ConcurrentHashMap<>();
     private final Map<String, Card> cards = new ConcurrentHashMap<>();
     private final Map<String, DisputeCase> cases = new ConcurrentHashMap<>();
     private final Map<String, Approval> approvals = new ConcurrentHashMap<>();
@@ -57,20 +58,20 @@ public class BankingService {
         accounts.put("ACC-1001", new Account("ACC-1001", "achu-bank", "demo-user", new BigDecimal("2500.00"), "CHECKING", null));
         accounts.put("ACC-1002", new Account("ACC-1002", "achu-bank", "demo-user", new BigDecimal("15750.25"), "SAVINGS", null));
         accounts.put("ACC-9001", new Account("ACC-9001", "globex-bank", "globex-user", new BigDecimal("99.00"), "CHECKING", null));
-        txns.put("ACC-1001", new CopyOnWriteArrayList<>(List.of(
+        List.of(
                 new Transaction("TXN-5001", "ACC-1001", LocalDate.now().minusDays(2),
                         new BigDecimal("49.99"), "StreamCo Subscription", "DEBIT"),
                 new Transaction("TXN-5002", "ACC-1001", LocalDate.now().minusDays(2),
                         new BigDecimal("49.99"), "StreamCo Subscription", "DEBIT"),
                 new Transaction("TXN-5003", "ACC-1001", LocalDate.now().minusDays(1),
                         new BigDecimal("2000.00"), "Foreign Electronics Ltd", "DEBIT")
-        )));
-        txns.put("ACC-1002", new CopyOnWriteArrayList<>(List.of(
+        ).forEach(t -> addTransaction("ACC-1001", t));
+        List.of(
                 new Transaction("TXN-6001", "ACC-1002", LocalDate.now().minusDays(5),
                         new BigDecimal("29.53"), "Interest Credit", "CREDIT"),
                 new Transaction("TXN-6002", "ACC-1002", LocalDate.now().minusDays(3),
                         new BigDecimal("400.00"), "ATM Withdrawal - Main St", "DEBIT")
-        )));
+        ).forEach(t -> addTransaction("ACC-1002", t));
         cards.put("CRD-7001", new Card("CRD-7001", "ACC-1001", "DEBIT", "VISA", "4412", "ACTIVE", null, Set.of()));
         cards.put("CRD-7002", new Card("CRD-7002", "ACC-1001", "CREDIT", "MASTERCARD", "8830", "ACTIVE", null, Set.of()));
         cards.put("CRD-7003", new Card("CRD-7003", "ACC-1002", "DEBIT", "VISA", "1177", "ACTIVE", null, Set.of()));
@@ -105,15 +106,16 @@ public class BankingService {
     }
 
     public List<Transaction> getTransactions(String accountId) {
-        return txns.getOrDefault(accountId, new CopyOnWriteArrayList<>());
+        return List.copyOf(txns.getOrDefault(accountId, new CopyOnWriteArrayList<>()));
     }
 
     public Transaction findTransaction(String transactionId) {
-        return txns.values().stream()
-                .flatMap(List::stream)
-                .filter(t -> t.txnId().equals(transactionId))
-                .findFirst()
-                .orElse(null);
+        return txnIndex.get(transactionId);
+    }
+
+    private void addTransaction(String accountId, Transaction t) {
+        txns.computeIfAbsent(accountId, k -> new CopyOnWriteArrayList<>()).add(t);
+        txnIndex.put(t.txnId(), t);
     }
 
     public List<Card> getCards(String accountId) {
@@ -190,11 +192,11 @@ public class BankingService {
     }
 
     public Map<String, Approval> pendingApprovals() {
-        return approvals;
+        return Map.copyOf(approvals);
     }
 
     public List<LedgerEntry> ledgerFor(String accountId) {
-        return ledger.getOrDefault(accountId, new CopyOnWriteArrayList<>());
+        return List.copyOf(ledger.getOrDefault(accountId, new CopyOnWriteArrayList<>()));
     }
 
     public synchronized List<LedgerEntry> transfer(String fromAccountId, String toAccountId,
@@ -227,12 +229,10 @@ public class BankingService {
         ledger.computeIfAbsent(fromAccountId, k -> new CopyOnWriteArrayList<>()).add(debit);
         ledger.computeIfAbsent(toAccountId, k -> new CopyOnWriteArrayList<>()).add(credit);
 
-        txns.computeIfAbsent(fromAccountId, k -> new CopyOnWriteArrayList<>())
-                .add(new Transaction(debit.entryId(), fromAccountId, LocalDate.now(), amount,
-                        "Transfer to " + toAccountId, "DEBIT"));
-        txns.computeIfAbsent(toAccountId, k -> new CopyOnWriteArrayList<>())
-                .add(new Transaction(credit.entryId(), toAccountId, LocalDate.now(), amount,
-                        "Transfer from " + fromAccountId, "CREDIT"));
+        addTransaction(fromAccountId, new Transaction(debit.entryId(), fromAccountId, LocalDate.now(), amount,
+                "Transfer to " + toAccountId, "DEBIT"));
+        addTransaction(toAccountId, new Transaction(credit.entryId(), toAccountId, LocalDate.now(), amount,
+                "Transfer from " + fromAccountId, "CREDIT"));
 
         return List.of(debit, credit);
     }
@@ -248,6 +248,13 @@ public class BankingService {
                 phone != null ? phone : (p != null ? p.phone() : null),
                 p != null && p.lowBalanceAlerts(), p != null && p.largeTransactionAlerts(),
                 p != null ? p.travelNoticeUntil() : null, p != null ? p.travelDestination() : null));
+    }
+
+    public void eraseContactInfoIfPresent(String tenantId, String userId, String email, String phone) {
+        profiles.computeIfPresent(tenantId + ":" + userId, (k, p) -> new CustomerProfile(
+                tenantId, userId, email, phone,
+                p.lowBalanceAlerts(), p.largeTransactionAlerts(),
+                p.travelNoticeUntil(), p.travelDestination()));
     }
 
     public CustomerProfile setAlertPreferences(String tenantId, String userId,

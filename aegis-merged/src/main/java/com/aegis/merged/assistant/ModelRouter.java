@@ -1,12 +1,12 @@
 package com.aegis.merged.assistant;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
-import java.time.Instant;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 @Component
@@ -27,23 +27,17 @@ public class ModelRouter {
             "\\b(acc|txn|case|apr|crd)-\\d+\\b", Pattern.CASE_INSENSITIVE);
 
     private static final Duration ESCALATION_TTL = Duration.ofMinutes(10);
+    private static final int MAX_ESCALATIONS = 1_000;
 
-    private record Escalation(Instant expiresAt) {
-        boolean expired() { return Instant.now().isAfter(expiresAt); }
-    }
-
-    private final ConcurrentHashMap<String, Escalation> escalated = new ConcurrentHashMap<>();
-
-    private static final int SWEEP_THRESHOLD = 1_000;
+    private final Cache<String, Boolean> escalated = Caffeine.newBuilder()
+            .maximumSize(MAX_ESCALATIONS)
+            .expireAfterWrite(ESCALATION_TTL)
+            .build();
 
     public Tier decide(String message, String memoryKey) {
-        Escalation e = escalated.get(memoryKey);
-        if (e != null) {
-            if (!e.expired()) {
-                log.info("router.tier=COMPLEX reason=escalated-conversation key={}", memoryKey);
-                return Tier.COMPLEX;
-            }
-            escalated.remove(memoryKey);
+        if (escalated.getIfPresent(memoryKey) != null) {
+            log.info("router.tier=COMPLEX reason=escalated-conversation key={}", memoryKey);
+            return Tier.COMPLEX;
         }
 
         if (message == null) return Tier.SIMPLE;
@@ -74,10 +68,7 @@ public class ModelRouter {
 
     public void markLowConfidence(String memoryKey, String answer, boolean toolFailed) {
         if (toolFailed || AnswerConfidence.looksLowConfidence(answer)) {
-            if (escalated.size() >= SWEEP_THRESHOLD) {
-                escalated.values().removeIf(Escalation::expired);
-            }
-            escalated.put(memoryKey, new Escalation(Instant.now().plus(ESCALATION_TTL)));
+            escalated.put(memoryKey, Boolean.TRUE);
             log.info("router.escalating-next-turn key={} toolFailed={}", memoryKey, toolFailed);
         }
     }

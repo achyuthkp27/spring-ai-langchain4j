@@ -1,5 +1,8 @@
 package com.aegis.merged.assistant;
 
+import com.aegis.merged.guardrails.LlmGuard;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -13,11 +16,8 @@ import org.springframework.ai.ollama.api.ThinkOption;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class ScopeGate {
@@ -71,15 +71,16 @@ public class ScopeGate {
 
     private final ChatClient classifier;
     private final ChatMemory chatMemory;
+    private final LlmGuard llmGuard;
 
-    private record CachedVerdict(boolean inScope, Instant expiresAt) {
-        boolean expired() { return Instant.now().isAfter(expiresAt); }
-    }
     private static final Duration VERDICT_TTL = Duration.ofHours(1);
     private static final int MAX_VERDICTS = 5_000;
-    private final Map<String, CachedVerdict> verdicts = new ConcurrentHashMap<>();
+    private final Cache<String, Boolean> verdicts = Caffeine.newBuilder()
+            .maximumSize(MAX_VERDICTS)
+            .expireAfterWrite(VERDICT_TTL)
+            .build();
 
-    public ScopeGate(ChatClient.Builder builder, ChatMemory chatMemory,
+    public ScopeGate(ChatClient.Builder builder, ChatMemory chatMemory, LlmGuard llmGuard,
                      @Value("${aegis.scope-gate.classifier-model:}") String classifierModel,
                      @Value("${aegis.llm.think:}") String think) {
 
@@ -100,6 +101,7 @@ public class ScopeGate {
                 .defaultOptions(options)
                 .build();
         this.chatMemory = chatMemory;
+        this.llmGuard = llmGuard;
     }
 
     public boolean inScope(String message, String conversationKey) {
@@ -115,18 +117,18 @@ public class ScopeGate {
         boolean standalone = context.isBlank();
 
         if (standalone) {
-            CachedVerdict cached = verdicts.get(norm);
-            if (cached != null && !cached.expired()) return cached.inScope();
+            Boolean cached = verdicts.getIfPresent(norm);
+            if (cached != null) return cached;
         }
 
         try {
             String user = standalone ? message
                     : "Recent conversation:\n" + context + "\n\nNew user message: " + message;
-            String verdict = classifier.prompt().user(user).call().content();
+            String verdict = llmGuard.call(() -> classifier.prompt().user(user).call().content());
             boolean out = verdict != null && verdict.toUpperCase().contains("OUT");
 
             if (out) log.info("scope.gate.blocked msgLength={} verdict='{}'", message.length(), verdict);
-            if (standalone) putVerdict(norm, !out);
+            if (standalone) verdicts.put(norm, !out);
             return !out;
         } catch (Exception e) {
             
@@ -154,11 +156,4 @@ public class ScopeGate {
         }
     }
 
-    private void putVerdict(String key, boolean inScope) {
-
-        if (verdicts.size() >= MAX_VERDICTS) {
-            verdicts.values().removeIf(CachedVerdict::expired);
-        }
-        verdicts.put(key, new CachedVerdict(inScope, Instant.now().plus(VERDICT_TTL)));
-    }
 }

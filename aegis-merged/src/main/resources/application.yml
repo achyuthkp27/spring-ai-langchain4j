@@ -2,6 +2,7 @@
 server:
   port: 8082
   shutdown: graceful
+  max-http-request-header-size: 16KB
   tomcat:
     max-swallow-size: 2MB
 
@@ -16,18 +17,24 @@ spring:
     async:
       request-timeout: 60000
 
+  servlet:
+    multipart:
+      max-file-size: 1MB
+      max-request-size: 1MB
+
   docker:
     compose:
       enabled: false
   datasource:
     url: jdbc:postgresql://localhost:5432/aegis
     username: aegis
-    password: aegis
+    password: aegis-dev-only
 
   data:
     redis:
       host: localhost
       port: 6379
+      password: ${REDIS_PASSWORD:aegis-dev-only}
 
   ai:
     model:
@@ -39,12 +46,8 @@ spring:
         transcription: none
         speech: none
 
-    # Resilience: retry transient model errors with backoff (spring-ai-retry).
     retry:
-      max-attempts: 3
-      backoff:
-        initial-interval: 800ms
-        multiplier: 2
+      max-attempts: 1
       on-client-errors: false
 
     ollama:
@@ -56,7 +59,7 @@ spring:
           # qwen3.5:4b thinking model; aegis.llm.think=false keeps tool-calling
           model: qwen3.5:4b
           temperature: 0.2
-          num-predict: 512
+          num-predict: 1024
           num-ctx: 16384
       embedding:
         options:
@@ -80,7 +83,7 @@ spring:
       memory:
         repository:
           jdbc:
-            initialize-schema: always
+            initialize-schema: never
 
 aegis:
   llm:
@@ -102,6 +105,15 @@ aegis:
     default-daily-tokens: 100000
   cache:
     similarity-threshold: 0.62
+  llmguard:
+    call-timeout: 30s
+    first-token-timeout: 15s
+    inter-token-timeout: 30s
+  audit:
+    hmac-secret: ${AEGIS_AUDIT_HMAC_SECRET:}
+  aml:
+    large-transaction-threshold: 5000
+    velocity-threshold: 3
 
 management:
   endpoints:
@@ -187,6 +199,10 @@ spring:
   config:
     activate:
       on-profile: prod
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
 logging:
   structured:
     format:

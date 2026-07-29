@@ -13,6 +13,8 @@ import io.github.resilience4j.timelimiter.TimeLimiterConfig;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -34,10 +36,8 @@ public class LlmGuard {
         public LlmUnavailableException(String message) { super(message); }
     }
 
-    private static final Duration TIMEOUT = Duration.ofSeconds(30);
-
-    private static final Duration FIRST_TOKEN_TIMEOUT = Duration.ofSeconds(15);
-    private static final Duration INTER_TOKEN_TIMEOUT = Duration.ofSeconds(30);
+    private final Duration firstTokenTimeout;
+    private final Duration interTokenTimeout;
 
     private final CircuitBreaker breaker;
     private final TimeLimiter timeLimiter;
@@ -50,23 +50,32 @@ public class LlmGuard {
     });
 
     public LlmGuard() {
+        this(Duration.ofSeconds(30), Duration.ofSeconds(15), Duration.ofSeconds(30));
+    }
+
+    @Autowired
+    public LlmGuard(@Value("${aegis.llmguard.call-timeout:30s}") Duration callTimeout,
+                    @Value("${aegis.llmguard.first-token-timeout:15s}") Duration firstTokenTimeout,
+                    @Value("${aegis.llmguard.inter-token-timeout:30s}") Duration interTokenTimeout) {
+        this.firstTokenTimeout = firstTokenTimeout;
+        this.interTokenTimeout = interTokenTimeout;
         var cbConfig = CircuitBreakerConfig.custom()
-                .slidingWindowSize(20)                                   
-                .failureRateThreshold(50)                               
-                .slowCallRateThreshold(90)                              
-                .slowCallDurationThreshold(Duration.ofSeconds(25))     
-                .waitDurationInOpenState(Duration.ofSeconds(15))       
+                .slidingWindowSize(20)
+                .failureRateThreshold(50)
+                .slowCallRateThreshold(90)
+                .slowCallDurationThreshold(Duration.ofSeconds(25))
+                .waitDurationInOpenState(Duration.ofSeconds(15))
                 .permittedNumberOfCallsInHalfOpenState(3)
-                .recordException(t -> !(t instanceof LlmUnavailableException)) 
+                .recordException(t -> !(t instanceof LlmUnavailableException))
                 .build();
         this.breaker = CircuitBreaker.of("llm", cbConfig);
         this.timeLimiter = TimeLimiter.of(TimeLimiterConfig.custom()
-                .timeoutDuration(TIMEOUT)
+                .timeoutDuration(callTimeout)
                 .cancelRunningFuture(true)
                 .build());
         this.bulkhead = Bulkhead.of("llm", BulkheadConfig.custom()
-                .maxConcurrentCalls(4)                       
-                .maxWaitDuration(Duration.ofSeconds(5))      
+                .maxConcurrentCalls(4)
+                .maxWaitDuration(Duration.ofSeconds(5))
                 .build());
         this.breaker.getEventPublisher().onStateTransition(e ->
                 log.warn("llm.circuit state {} -> {}", e.getStateTransition().getFromState(),
@@ -97,7 +106,7 @@ public class LlmGuard {
     public <T> Flux<T> guard(Flux<T> source) {
         return source
                 .transformDeferred(CircuitBreakerOperator.of(breaker))
-                .timeout(Mono.delay(FIRST_TOKEN_TIMEOUT), t -> Mono.delay(INTER_TOKEN_TIMEOUT))
+                .timeout(Mono.delay(firstTokenTimeout), t -> Mono.delay(interTokenTimeout))
                 .transformDeferred(BulkheadOperator.of(bulkhead));
     }
 

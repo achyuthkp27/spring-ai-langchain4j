@@ -1,5 +1,6 @@
 package com.aegis.merged.security;
 
+import com.aegis.merged.admin.AuditTrail;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -14,6 +15,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -38,6 +40,9 @@ class SecurityWiringTest {
 
     @Autowired
     private ObjectMapper json;
+
+    @Autowired
+    private AuditTrail audit;
 
     private String mint(String userId, String tenantId, String role) throws Exception {
         String body = json.writeValueAsString(Map.of("userId", userId, "tenantId", tenantId, "role", role));
@@ -97,5 +102,27 @@ class SecurityWiringTest {
         mockMvc.perform(get("/api/admin/conversations").param("tenant", "globex-bank")
                         .header("Authorization", "Bearer " + platformAdmin))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void anAdminOfOneTenantCannotSeeAnotherTenantsRowsInOverviewOrEvents() throws Exception {
+        String marker = "marker-" + System.nanoTime();
+        audit.record("achu-bank", "achu-user", "c1", "llm", 5, 5, marker + "-achu");
+        audit.record("globex-bank", "globex-user", "c1", "llm", 5, 5, marker + "-globex");
+
+        String achuAdmin = mint("achu-admin2", "achu-bank", "admin");
+
+        String eventsBody = mockMvc.perform(get("/api/admin/events").param("limit", "500")
+                        .header("Authorization", "Bearer " + achuAdmin))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertThat(eventsBody).contains(marker + "-achu");
+        assertThat(eventsBody).doesNotContain(marker + "-globex");
+
+        String overviewBody = mockMvc.perform(get("/api/admin/overview")
+                        .header("Authorization", "Bearer " + achuAdmin))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertThat(overviewBody).doesNotContain("globex-bank");
     }
 }

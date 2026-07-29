@@ -52,6 +52,12 @@ public class JwtService {
                             + "aegis.jwt.secret (need >= " + MIN_SECRET_BYTES + " bytes). Set a real secret "
                             + "(e.g. from a KMS/Vault-backed env var) before running in prod.");
         }
+        if (prod && this.knownTenants.isEmpty()) {
+            throw new IllegalStateException(
+                    "Refusing to start under the 'prod' profile with aegis.known-tenants unset — "
+                            + "that disables the tenant allowlist entirely. Set aegis.known-tenants to the "
+                            + "real list of tenants before running in prod.");
+        }
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.ttlSeconds = ttlSeconds;
         if (usingDefaultSecret) {

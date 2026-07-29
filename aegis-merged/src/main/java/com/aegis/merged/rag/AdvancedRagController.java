@@ -1,5 +1,6 @@
 package com.aegis.merged.rag;
 
+import com.aegis.merged.assistant.AnswerConfidence;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.rag.advisor.RetrievalAugmentationAdvisor;
@@ -83,7 +84,7 @@ public class AdvancedRagController {
                 .call()
                 .content();
 
-        if (answer != null && !answer.toLowerCase().contains("i don't have that")) {
+        if (answer != null && !AnswerConfidence.looksLowConfidence(answer)) {
             semanticCache.put(tenantId, request.question(), answer);
         }
 

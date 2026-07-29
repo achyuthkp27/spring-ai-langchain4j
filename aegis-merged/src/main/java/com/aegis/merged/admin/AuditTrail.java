@@ -2,14 +2,20 @@ package com.aegis.merged.admin;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import jakarta.annotation.PreDestroy;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -24,6 +30,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -48,8 +55,11 @@ public class AuditTrail {
     private final Instant startedAt = Instant.now();
 
     private final JdbcTemplate jdbc;
+    private final TransactionTemplate txTemplate;
 
     private static final int MAX_QUEUED_WRITES = 10_000;
+    private static final long ADVISORY_LOCK_KEY = 727310123456789L;
+    private static final String DEV_DEFAULT_HMAC_SECRET = "DEV-ONLY-AUDIT-CHAIN-SECRET-CHANGE-ME";
     private final AtomicLong droppedWrites = new AtomicLong();
     private final ExecutorService persistExecutor = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
             new LinkedBlockingQueue<>(MAX_QUEUED_WRITES),
@@ -65,51 +75,62 @@ public class AuditTrail {
                 }
             });
 
-    private final AtomicReference<String> lastHash = new AtomicReference<>("GENESIS");
+    private final SecretKeySpec hmacKey;
+    private final boolean usingDevDefaultSecret;
 
     public AuditTrail(JdbcTemplate jdbc) {
-        this.jdbc = jdbc;
+        this(jdbc, transactionManagerFor(jdbc), null);
     }
 
-    @EventListener(ApplicationReadyEvent.class)
-    public void createSchema() {
-        try {
-            jdbc.execute("""
-                    CREATE TABLE IF NOT EXISTS assistant_audit_event (
-                        id BIGSERIAL PRIMARY KEY,
-                        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                        tenant VARCHAR(256),
-                        user_id VARCHAR(256),
-                        conversation_id VARCHAR(256),
-                        source VARCHAR(64),
-                        elapsed_ms BIGINT,
-                        answer_chars INT,
-                        question TEXT,
-                        prev_hash VARCHAR(64) NOT NULL DEFAULT 'GENESIS',
-                        row_hash VARCHAR(64) NOT NULL DEFAULT ''
-                    )
-                    """);
+    private static PlatformTransactionManager transactionManagerFor(JdbcTemplate jdbc) {
+        var dataSource = jdbc.getDataSource();
+        return dataSource != null ? new DataSourceTransactionManager(dataSource) : new NoOpTransactionManager();
+    }
 
-            jdbc.execute("ALTER TABLE assistant_audit_event ADD COLUMN IF NOT EXISTS prev_hash VARCHAR(64) NOT NULL DEFAULT 'GENESIS'");
-            jdbc.execute("ALTER TABLE assistant_audit_event ADD COLUMN IF NOT EXISTS row_hash VARCHAR(64) NOT NULL DEFAULT ''");
+    private static final class NoOpTransactionManager
+            extends org.springframework.transaction.support.AbstractPlatformTransactionManager {
+        @Override
+        protected Object doGetTransaction() {
+            return new Object();
+        }
 
-            try {
-                String seeded = jdbc.queryForObject(
-                        "SELECT row_hash FROM assistant_audit_event WHERE row_hash <> '' ORDER BY id DESC LIMIT 1",
-                        String.class);
-                if (seeded != null) lastHash.set(seeded);
-            } catch (org.springframework.dao.EmptyResultDataAccessException ignored) {
-                
-            }
-        } catch (Exception e) {
-            log.warn("audit.schema.create skipped: {}", e.getMessage());
+        @Override
+        protected void doBegin(Object transaction, org.springframework.transaction.TransactionDefinition definition) {
+        }
+
+        @Override
+        protected void doCommit(org.springframework.transaction.support.DefaultTransactionStatus status) {
+        }
+
+        @Override
+        protected void doRollback(org.springframework.transaction.support.DefaultTransactionStatus status) {
         }
     }
 
-    private static String sha256Hex(String input) {
+    @Autowired
+    public AuditTrail(JdbcTemplate jdbc, PlatformTransactionManager txManager,
+                      @Value("${aegis.audit.hmac-secret:}") String hmacSecret) {
+        this.jdbc = jdbc;
+        this.txTemplate = new TransactionTemplate(txManager);
+        this.usingDevDefaultSecret = hmacSecret == null || hmacSecret.isBlank();
+        String secret = usingDevDefaultSecret ? DEV_DEFAULT_HMAC_SECRET : hmacSecret;
+        this.hmacKey = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+    }
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void warnIfUsingDevDefaultSecret() {
+        if (usingDevDefaultSecret) {
+            log.error("SECURITY: aegis.audit.hmac-secret is unset — using the built-in DEV-ONLY default. "
+                    + "The audit hash chain is forgeable by anyone who reads this source file. "
+                    + "Set aegis.audit.hmac-secret to a real secret before any shared/prod use.");
+        }
+    }
+
+    private String hmacHex(String input) {
         try {
-            var digest = MessageDigest.getInstance("SHA-256").digest(input.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(hmacKey);
+            return HexFormat.of().formatHex(mac.doFinal(input.getBytes(StandardCharsets.UTF_8)));
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
@@ -147,16 +168,21 @@ public class AuditTrail {
                               String source, long elapsedMs, int answerChars, String question) {
         persistExecutor.submit(() -> {
             try {
-                String prev = lastHash.get();
-                String row = sha256Hex(prev + "|" + tenant + "|" + user + "|" + conversationId + "|" + source
-                        + "|" + elapsedMs + "|" + answerChars + "|" + question);
-                jdbc.update("""
-                        INSERT INTO assistant_audit_event
-                            (tenant, user_id, conversation_id, source, elapsed_ms, answer_chars, question,
-                             prev_hash, row_hash)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, tenant, user, conversationId, source, elapsedMs, answerChars, question, prev, row);
-                lastHash.set(row);
+                txTemplate.executeWithoutResult(status -> {
+                    jdbc.execute("SELECT pg_advisory_xact_lock(" + ADVISORY_LOCK_KEY + ")");
+                    String prev = jdbc.query(
+                            "SELECT row_hash FROM assistant_audit_event WHERE row_hash <> '' ORDER BY id DESC LIMIT 1",
+                            rs -> rs.next() ? rs.getString(1) : null);
+                    if (prev == null || prev.isBlank()) prev = "GENESIS";
+                    String row = hmacHex(prev + "|" + tenant + "|" + user + "|" + conversationId + "|" + source
+                            + "|" + elapsedMs + "|" + answerChars + "|" + question);
+                    jdbc.update("""
+                            INSERT INTO assistant_audit_event
+                                (tenant, user_id, conversation_id, source, elapsed_ms, answer_chars, question,
+                                 prev_hash, row_hash)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """, tenant, user, conversationId, source, elapsedMs, answerChars, question, prev, row);
+                });
             } catch (Exception e) {
                 log.warn("audit.persist.failed: {}", e.getMessage());
             }
@@ -167,40 +193,46 @@ public class AuditTrail {
     }
 
     public ChainVerification verifyChain() {
-        var rows = jdbc.query("""
+        AtomicBoolean valid = new AtomicBoolean(true);
+        AtomicLong rowsChecked = new AtomicLong();
+        AtomicLong legacyRowsSkipped = new AtomicLong();
+        AtomicReference<String> expectedPrev = new AtomicReference<>();
+        AtomicReference<Long> brokenAtId = new AtomicReference<>();
+
+        jdbc.query("""
                 SELECT id, tenant, user_id, conversation_id, source, elapsed_ms, answer_chars, question,
                        prev_hash, row_hash
                 FROM assistant_audit_event ORDER BY id ASC""",
-                (rs, i) -> new Object[]{
-                        rs.getLong("id"), rs.getString("tenant"), rs.getString("user_id"),
-                        rs.getString("conversation_id"), rs.getString("source"), rs.getLong("elapsed_ms"),
-                        rs.getInt("answer_chars"), rs.getString("question"),
-                        rs.getString("prev_hash"), rs.getString("row_hash")});
+                rs -> {
+                    if (!valid.get()) return;
+                    long id = rs.getLong("id");
+                    String recordedHash = rs.getString("row_hash");
+                    rowsChecked.incrementAndGet();
+                    if (recordedHash == null || recordedHash.isBlank()) {
+                        legacyRowsSkipped.incrementAndGet();
+                        return;
+                    }
+                    String recordedPrev = rs.getString("prev_hash");
+                    if (expectedPrev.get() == null) {
+                        expectedPrev.set(recordedPrev);
+                    } else if (!expectedPrev.get().equals(recordedPrev)) {
+                        valid.set(false);
+                        brokenAtId.set(id);
+                        return;
+                    }
+                    String recomputed = hmacHex(recordedPrev + "|" + rs.getString("tenant") + "|"
+                            + rs.getString("user_id") + "|" + rs.getString("conversation_id") + "|"
+                            + rs.getString("source") + "|" + rs.getLong("elapsed_ms") + "|"
+                            + rs.getInt("answer_chars") + "|" + rs.getString("question"));
+                    if (!recomputed.equals(recordedHash)) {
+                        valid.set(false);
+                        brokenAtId.set(id);
+                        return;
+                    }
+                    expectedPrev.set(recordedHash);
+                });
 
-        String expectedPrev = null; 
-        long legacyRowsSkipped = 0;
-        for (Object[] r : rows) {
-            String recordedHash = (String) r[9];
-            if (recordedHash == null || recordedHash.isBlank()) {
-                
-                legacyRowsSkipped++;
-                continue;
-            }
-            String recordedPrev = (String) r[8];
-            if (expectedPrev == null) {
-
-                expectedPrev = recordedPrev;
-            } else if (!expectedPrev.equals(recordedPrev)) {
-                return new ChainVerification(false, rows.size(), legacyRowsSkipped, (Long) r[0]);
-            }
-            String recomputed = sha256Hex(recordedPrev + "|" + r[1] + "|" + r[2] + "|" + r[3] + "|" + r[4]
-                    + "|" + r[5] + "|" + r[6] + "|" + r[7]);
-            if (!recomputed.equals(recordedHash)) {
-                return new ChainVerification(false, rows.size(), legacyRowsSkipped, (Long) r[0]);
-            }
-            expectedPrev = recordedHash;
-        }
-        return new ChainVerification(true, rows.size(), legacyRowsSkipped, null);
+        return new ChainVerification(valid.get(), rowsChecked.get(), legacyRowsSkipped.get(), brokenAtId.get());
     }
 
     public void toolCalled(String tool, String tenant) {
@@ -212,8 +244,13 @@ public class AuditTrail {
     }
 
     public List<Event> recent(int limit) {
+        return recent(null, limit);
+    }
+
+    public List<Event> recent(String tenant, int limit) {
         List<Event> out = new ArrayList<>(Math.min(limit, size.get()));
         for (Event e : events) {
+            if (tenant != null && !tenant.equals(e.tenant())) continue;
             out.add(e);
             if (out.size() >= limit) break;
         }
@@ -226,19 +263,40 @@ public class AuditTrail {
         return out;
     }
 
+    public Map<String, Long> countsBySource(String tenant) {
+        if (tenant == null) return countsBySource();
+        Map<String, Long> out = new TreeMap<>();
+        for (Event e : events) {
+            if (!tenant.equals(e.tenant())) continue;
+            out.merge(e.source(), 1L, Long::sum);
+        }
+        return out;
+    }
+
     public Map<String, Map<String, Long>> toolUsage() {
+        return toolUsage(null);
+    }
+
+    public Map<String, Map<String, Long>> toolUsage(String tenant) {
         Map<String, Map<String, Long>> out = new TreeMap<>();
         toolCalls.forEach((key, v) -> {
             int i = key.indexOf('|');
-            out.computeIfAbsent(key.substring(0, i), k -> new TreeMap<>())
-               .put(key.substring(i + 1), v.sum());
+            String tool = key.substring(0, i);
+            String t = key.substring(i + 1);
+            if (tenant != null && !tenant.equals(t)) return;
+            out.computeIfAbsent(tool, k -> new TreeMap<>()).put(t, v.sum());
         });
         return out;
     }
 
     public Map<String, Map<String, Long>> latency() {
+        return latency(null);
+    }
+
+    public Map<String, Map<String, Long>> latency(String tenant) {
         Map<String, List<Long>> samples = new TreeMap<>();
         for (Event e : events) {
+            if (tenant != null && !tenant.equals(e.tenant())) continue;
             samples.computeIfAbsent(e.source(), k -> new ArrayList<>()).add(e.elapsedMs());
             samples.computeIfAbsent("all", k -> new ArrayList<>()).add(e.elapsedMs());
         }
@@ -257,10 +315,15 @@ public class AuditTrail {
     }
 
     public List<Map<String, Object>> timeseries(int minutes) {
+        return timeseries(null, minutes);
+    }
+
+    public List<Map<String, Object>> timeseries(String tenant, int minutes) {
         Instant cutoff = Instant.now().minus(minutes, ChronoUnit.MINUTES).truncatedTo(ChronoUnit.MINUTES);
         Map<Instant, Map<String, Long>> buckets = new TreeMap<>();
         for (Event e : events) {
             if (e.at().isBefore(cutoff)) continue;
+            if (tenant != null && !tenant.equals(e.tenant())) continue;
             Instant min = e.at().truncatedTo(ChronoUnit.MINUTES);
             buckets.computeIfAbsent(min, k -> new java.util.HashMap<>())
                    .merge(bucketKey(e.source()), 1L, Long::sum);

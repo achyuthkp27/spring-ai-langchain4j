@@ -34,7 +34,7 @@ public class RouterConfig {
 
         OllamaApi api = OllamaApi.builder().baseUrl(baseUrl).build();
 
-        var options = OllamaChatOptions.builder().model(model).numCtx(16384).numPredict(512);
+        var options = OllamaChatOptions.builder().model(model).numCtx(16384).numPredict(1024);
         if (!think.isBlank()) {
             options.thinkOption(new ThinkOption.ThinkBoolean(Boolean.parseBoolean(think)));
         }
@@ -60,7 +60,7 @@ public class RouterConfig {
         AnthropicApi api = AnthropicApi.builder().apiKey(apiKey).build();
         AnthropicChatModel chatModel = AnthropicChatModel.builder()
                 .anthropicApi(api)
-                .defaultOptions(AnthropicChatOptions.builder().model(model).maxTokens(1024).build())
+                .defaultOptions(AnthropicChatOptions.builder().model(model).maxTokens(2048).build())
                 .build();
         return ChatClient.builder(chatModel)
                 .defaultSystem(AssistantConfig.ASSISTANT_SYSTEM_PROMPT)

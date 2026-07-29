@@ -12,8 +12,12 @@ This repository contains **AegisAI**, a multi-tenant, production-grade GenAI pla
 
 ## Project Structure
 
-- `aegis-ai/`: Core backend built with Spring AI.
-- `aegis-lc4j/`: Next.js frontend and LangChain4j integrations.
-- `aegis-merged/`: Merged services and shared components.
+- `aegis-merged/`: **The active backend.** Spring AI + Spring Boot, PostgreSQL/pgvector, Redis-backed
+  guardrails, JWT auth, and the full tool/agent surface. This is where fixes and features land.
+- `aegis-lc4j/frontend/`: **The active UI.** Next.js app that talks to `aegis-merged`.
+- `aegis-ai/`: Superseded by `aegis-merged`. Kept as a study/reference build only — do not fix bugs
+  here, they won't reach production.
+- `aegis-lc4j/backend/`: Superseded by `aegis-merged`. Also a study/reference build only; the
+  `aegis-lc4j/frontend` UI does not talk to this backend.
 
 *Please see [SpringAI-GenAI-Project.md](./SpringAI-GenAI-Project.md) for detailed architecture, capabilities, and learning paths.*

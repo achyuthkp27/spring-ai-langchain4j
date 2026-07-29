@@ -73,8 +73,10 @@ public class AdminController {
     }
 
     @GetMapping("/overview")
-    public Map<String, Object> overview() {
-        Map<String, Long> sources = audit.countsBySource();
+    public Map<String, Object> overview(@RequestParam(required = false) String tenant) {
+        String tenantFilter = resolveTenantFilter(tenant);
+
+        Map<String, Long> sources = audit.countsBySource(tenantFilter);
         long total = sources.values().stream().mapToLong(Long::longValue).sum();
         long llm = sources.getOrDefault("llm", 0L);
         long cache = sources.getOrDefault("cache", 0L);
@@ -82,10 +84,12 @@ public class AdminController {
                 .filter(e -> e.getKey().startsWith("blocked")).mapToLong(Map.Entry::getValue).sum();
 
         List<Map<String, Object>> spend = new ArrayList<>();
-        meters.find("aegis.ai.tokens.total").counters().forEach(c -> spend.add(Map.of(
-                "tenant", String.valueOf(c.getId().getTag("tenant")),
-                "model", String.valueOf(c.getId().getTag("model")),
-                "tokens", Math.round(c.count()))));
+        meters.find("aegis.ai.tokens.total").counters().forEach(c -> {
+            String t = String.valueOf(c.getId().getTag("tenant"));
+            if (tenantFilter != null && !tenantFilter.equals(t)) return;
+            spend.add(Map.of("tenant", t, "model", String.valueOf(c.getId().getTag("model")),
+                    "tokens", Math.round(c.count())));
+        });
 
         Map<String, Object> tenants = new TreeMap<>();
         for (Map<String, Object> s : spend) {
@@ -101,22 +105,26 @@ public class AdminController {
                 "total", total, "llm", llm, "cache", cache, "blocked", blocked,
                 "cacheHitRate", (llm + cache) == 0 ? 0.0 : (double) cache / (llm + cache)));
         out.put("bySource", sources);
-        out.put("latencyMs", audit.latency());
+        out.put("latencyMs", audit.latency(tenantFilter));
         out.put("tokenSpend", spend);
         out.put("tenantBudgets", tenants);
-        out.put("toolUsage", audit.toolUsage());
+        out.put("toolUsage", audit.toolUsage(tenantFilter));
         out.put("llmCircuit", llmGuard.circuitState());
         return out;
     }
 
     @GetMapping("/events")
-    public List<AuditTrail.Event> events(@RequestParam(defaultValue = "100") int limit) {
-        return audit.recent(Math.min(limit, AuditTrail.MAX_EVENTS));
+    public List<AuditTrail.Event> events(@RequestParam(defaultValue = "100") int limit,
+                                         @RequestParam(required = false) String tenant) {
+        String tenantFilter = resolveTenantFilter(tenant);
+        return audit.recent(tenantFilter, Math.min(limit, AuditTrail.MAX_EVENTS));
     }
 
     @GetMapping("/timeseries")
-    public List<Map<String, Object>> timeseries(@RequestParam(defaultValue = "60") int minutes) {
-        return audit.timeseries(Math.min(Math.max(minutes, 5), 24 * 60));
+    public List<Map<String, Object>> timeseries(@RequestParam(defaultValue = "60") int minutes,
+                                                @RequestParam(required = false) String tenant) {
+        String tenantFilter = resolveTenantFilter(tenant);
+        return audit.timeseries(tenantFilter, Math.min(Math.max(minutes, 5), 24 * 60));
     }
 
     @GetMapping("/conversations")
@@ -145,19 +153,21 @@ public class AdminController {
                 }, tenantFilter, tenantFilter == null ? null : tenantFilter + ":%", cappedLimit);
     }
 
+    private static final int MAX_TRANSCRIPT_MESSAGES = 2000;
+
     @GetMapping("/conversations/{id}/messages")
     public List<Map<String, Object>> transcript(@PathVariable String id) {
         requireOwnConversation(id);
         return jdbc.query("""
                 SELECT type, content, "timestamp" FROM spring_ai_chat_memory
-                WHERE conversation_id = ? ORDER BY "timestamp" """,
+                WHERE conversation_id = ? ORDER BY "timestamp" LIMIT ?""",
                 (rs, i) -> {
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("type", rs.getString("type"));
                     m.put("content", rs.getString("content"));
                     m.put("at", rs.getTimestamp("timestamp").toInstant().toString());
                     return m;
-                }, id);
+                }, id, MAX_TRANSCRIPT_MESSAGES);
     }
 
     @GetMapping("/rag")

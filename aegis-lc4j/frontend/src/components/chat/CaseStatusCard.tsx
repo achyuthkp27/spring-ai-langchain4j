@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { motion } from "framer-motion";
 import clsx from "clsx";
 import { FileQuestion } from "lucide-react";
@@ -13,7 +14,7 @@ function statusTone(status: string): "good" | "warning" | "critical" | "accent" 
   return "accent";
 }
 
-export function CaseStatusCard({ caseData }: { caseData: CaseData }) {
+export const CaseStatusCard = memo(function CaseStatusCard({ caseData }: { caseData: CaseData }) {
   const tone = statusTone(caseData.status);
 
   return (
@@ -47,4 +48,4 @@ export function CaseStatusCard({ caseData }: { caseData: CaseData }) {
       <p className="mt-1 text-[13px] leading-snug">{caseData.reason}</p>
     </motion.div>
   );
-}
+});

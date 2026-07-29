@@ -6,14 +6,15 @@ import org.springframework.ai.document.Document;
 import org.springframework.ai.reader.markdown.MarkdownDocumentReader;
 import org.springframework.ai.reader.markdown.config.MarkdownDocumentReaderConfig;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
-import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -35,17 +36,11 @@ public class IngestionService {
     public int ingestAll() {
         semanticCache.clear();
 
-        var all = vectorStore.similaritySearch(SearchRequest.builder()
-                .query("*").topK(10_000).similarityThreshold(0.0).build());
-        if (all != null && !all.isEmpty()) {
-            vectorStore.delete(all.stream().map(Document::getId).toList());
-            log.info("ingest cleared existing chunks={}", all.size());
-        }
         var resolver = new PathMatchingResourcePatternResolver();
         int total = 0;
         try {
             Resource[] resources = resolver.getResources("classpath:documents/*/*.md");
-            List<Document> chunks = new ArrayList<>();
+            Map<String, List<Document>> chunksByTenant = new LinkedHashMap<>();
             for (Resource resource : resources) {
                 String tenantId = tenantOf(resource);
                 var config = MarkdownDocumentReaderConfig.builder()
@@ -57,18 +52,26 @@ public class IngestionService {
                         .build();
                 List<Document> docs = new MarkdownDocumentReader(resource, config).get();
                 List<Document> split = splitter.apply(docs);
-                // TokenTextSplitter drops metadata by default on some versions; re-stamp defensively.
                 for (Document d : split) {
                     d.getMetadata().putIfAbsent("tenantId", tenantId);
                     d.getMetadata().putIfAbsent("docType", docTypeOf(resource));
                     d.getMetadata().putIfAbsent("source", resource.getFilename());
                 }
-                chunks.addAll(split);
+                chunksByTenant.computeIfAbsent(tenantId, k -> new ArrayList<>()).addAll(split);
                 log.info("ingest tenant={} source={} chunks={}", tenantId, resource.getFilename(), split.size());
             }
-            if (!chunks.isEmpty()) {
-                vectorStore.add(chunks);
-                total = chunks.size();
+
+            var filterBuilder = new FilterExpressionBuilder();
+            for (String tenantId : chunksByTenant.keySet()) {
+                vectorStore.delete(filterBuilder.eq("tenantId", tenantId).build());
+            }
+            log.info("ingest cleared existing chunks for tenants={}", chunksByTenant.keySet());
+
+            for (List<Document> chunks : chunksByTenant.values()) {
+                if (!chunks.isEmpty()) {
+                    vectorStore.add(chunks);
+                    total += chunks.size();
+                }
             }
         } catch (Exception e) {
             throw new IllegalStateException("Ingestion failed", e);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { memo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import clsx from "clsx";
 import { ChevronLeft, ChevronRight, Snowflake, Wifi } from "lucide-react";
@@ -70,7 +70,7 @@ function CardFace({ card, index }: { card: CardData; index: number }) {
   );
 }
 
-export function CardCarousel({ cards }: { cards: CardData[] }) {
+export const CardCarousel = memo(function CardCarousel({ cards }: { cards: CardData[] }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
 
@@ -146,4 +146,4 @@ export function CardCarousel({ cards }: { cards: CardData[] }) {
       )}
     </div>
   );
-}
+});

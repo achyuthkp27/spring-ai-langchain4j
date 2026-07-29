@@ -12,6 +12,17 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 
+/**
+ * {@link ConfirmationGuard} tokens provide argument binding, not human-in-the-loop consent: they
+ * guarantee the model cannot change a mutating call's arguments between describing it and
+ * executing it, but the token round-trips through the tool-result string the model itself reads,
+ * so nothing stops the model from calling a tool twice in the same turn with no user utterance in
+ * between. Genuine consent needs the token to round-trip through the client (a dedicated SSE
+ * event, an explicit Approve/Cancel UI control, POSTed back) rather than living entirely inside
+ * one model turn. {@link #updateContactInfo} is a particular case worth calling out: changing the
+ * fraud-alert contact channel is the classic account-takeover step, and a confirmation token held
+ * by the model is not step-up auth — a real system sends an OTP to the existing contact first.
+ */
 @Component
 public class BankingTools {
 
@@ -152,6 +163,16 @@ public class BankingTools {
     private static final int MAX_NICKNAME_LENGTH = 40;
 
     private static final int MAX_TRAVEL_NOTICE_DAYS_AHEAD = 366;
+    private static final int MAX_TRANSACTIONS_RETURNED = 20;
+    private static final int MAX_CARDS_RETURNED = 20;
+
+    private static java.util.List<BankingService.Transaction> mostRecent(
+            java.util.List<BankingService.Transaction> txns, int limit) {
+        return txns.stream()
+                .sorted(java.util.Comparator.comparing(BankingService.Transaction::date).reversed())
+                .limit(limit)
+                .toList();
+    }
 
     private final BankingService banking;
     private final com.aegis.merged.admin.AuditTrail audit;
@@ -235,12 +256,17 @@ public class BankingTools {
         status(ctx, "Fetching transactions for " + accountId + "…");
         var acct = ownedAccount(p, accountId);
         if (acct == null) { markFailed(ctx); return "No account found: " + accountId; }
-        var list = banking.getTransactions(accountId);
-        if (list.isEmpty()) { markFailed(ctx); return "No transactions for " + accountId; }
+        var all = banking.getTransactions(accountId);
+        if (all.isEmpty()) { markFailed(ctx); return "No transactions for " + accountId; }
+        var list = mostRecent(all, MAX_TRANSACTIONS_RETURNED);
         emitTransactions(ctx, list);
         StringBuilder sb = new StringBuilder("Transactions for " + accountId + ":\n");
         list.forEach(t -> sb.append("- ").append(t.txnId()).append(" ").append(t.date())
                 .append(" $").append(t.amount()).append(" ").append(t.merchant()).append("\n"));
+        if (all.size() > list.size()) {
+            sb.append("(showing the ").append(list.size()).append(" most recent of ")
+                    .append(all.size()).append(" total)\n");
+        }
         log.info("tool.searchTransactions user={} account={} count={}", p.userId(), accountId, list.size());
         return sb.toString();
     }
@@ -293,8 +319,9 @@ public class BankingTools {
         status(ctx, "Fetching cards for " + accountId + "…");
         var acct = ownedAccount(p, accountId);
         if (acct == null) { markFailed(ctx); return "No account found: " + accountId; }
-        var list = banking.getCards(accountId);
-        if (list.isEmpty()) { markFailed(ctx); return "No cards on " + accountId; }
+        var all = banking.getCards(accountId);
+        if (all.isEmpty()) { markFailed(ctx); return "No cards on " + accountId; }
+        var list = all.size() > MAX_CARDS_RETURNED ? all.subList(0, MAX_CARDS_RETURNED) : all;
         emitCards(ctx, list);
         StringBuilder sb = new StringBuilder("Cards on " + accountId + ":\n");
         list.forEach(c -> sb.append("- ").append(c.cardId()).append(" ").append(c.network()).append(" ")
@@ -337,6 +364,7 @@ public class BankingTools {
         audit.toolCalled("freezeCard", p.tenantId());
         status(ctx, "Freezing card " + cardId + "…");
         var frozen = banking.freezeCard(cardId);
+        if (frozen == null) { markFailed(ctx); return "Card " + cardId + " no longer exists."; }
         markMutated(ctx);
         emitCards(ctx, java.util.List.of(frozen));
         log.info("tool.freezeCard user={} card={} reason={}", p.userId(), cardId, reason);
@@ -537,8 +565,9 @@ public class BankingTools {
         status(ctx, "Building your statement for " + accountId + "…");
         var acct = ownedAccount(p, accountId);
         if (acct == null) { markFailed(ctx); return "No account found: " + accountId; }
-        var list = banking.getTransactions(accountId);
-        if (list.isEmpty()) { markFailed(ctx); return "No transactions to summarize for " + accountId; }
+        var all = banking.getTransactions(accountId);
+        if (all.isEmpty()) { markFailed(ctx); return "No transactions to summarize for " + accountId; }
+        var list = mostRecent(all, MAX_TRANSACTIONS_RETURNED);
 
         var byCategory = new java.util.TreeMap<String, BigDecimal>();
         BigDecimal debits = BigDecimal.ZERO;
@@ -593,6 +622,7 @@ public class BankingTools {
         audit.toolCalled("unfreezeCard", p.tenantId());
         status(ctx, "Unfreezing card " + cardId + "…");
         var updated = banking.unfreezeCard(cardId);
+        if (updated == null) { markFailed(ctx); return "Card " + cardId + " no longer exists."; }
         markMutated(ctx);
         emitCards(ctx, java.util.List.of(updated));
         log.info("tool.unfreezeCard user={} card={}", p.userId(), cardId);
@@ -626,6 +656,7 @@ public class BankingTools {
         }
         status(ctx, "Updating spending limit for " + cardId + "…");
         var updated = banking.setSpendingLimit(cardId, parsed);
+        if (updated == null) { markFailed(ctx); return "Card " + cardId + " no longer exists."; }
         markMutated(ctx);
         emitCards(ctx, java.util.List.of(updated));
         log.info("tool.setCardSpendingLimit user={} card={} limit={}", p.userId(), cardId, parsed);
@@ -655,6 +686,7 @@ public class BankingTools {
         audit.toolCalled("toggleMerchantCategoryBlock", p.tenantId());
         status(ctx, (blocked ? "Blocking " : "Unblocking ") + normalizedCategory + " on " + cardId + "…");
         var updated = banking.toggleMerchantCategory(cardId, normalizedCategory, blocked);
+        if (updated == null) { markFailed(ctx); return "Card " + cardId + " no longer exists."; }
         markMutated(ctx);
         emitCards(ctx, java.util.List.of(updated));
         log.info("tool.toggleMerchantCategoryBlock user={} card={} category={} blocked={}",
@@ -713,6 +745,7 @@ public class BankingTools {
         if (acct == null) { markFailed(ctx); audit.toolCalled("renameAccount", p.tenantId()); return "No account found: " + accountId; }
         audit.toolCalled("renameAccount", p.tenantId());
         var updated = banking.renameAccount(accountId, nickname.strip());
+        if (updated == null) { markFailed(ctx); return "Account " + accountId + " no longer exists."; }
         markMutated(ctx);
         emitAccounts(ctx, java.util.List.of(updated));
         log.info("tool.renameAccount user={} account={} nickname={}", p.userId(), accountId, nickname);
@@ -743,7 +776,8 @@ public class BankingTools {
         audit.toolCalled("requestAccountClosure", p.tenantId());
         status(ctx, "Submitting closure request for " + accountId + "…");
 
-        var approval = banking.requestApproval(p.tenantId(), "ACCOUNT-CLOSURE:" + accountId, acct.balance(), p.userId());
+        var approval = banking.requestApproval(p.tenantId(), "ACCOUNT-CLOSURE:" + accountId,
+                BigDecimal.ZERO, p.userId());
         markMutated(ctx);
         emitApproval(ctx, approval);
         log.info("tool.requestAccountClosure user={} account={} approval={}", p.userId(), accountId, approval.approvalId());
@@ -808,6 +842,7 @@ public class BankingTools {
         }
         audit.toolCalled("addCaseEvidence", p.tenantId());
         var updated = banking.addEvidence(caseId);
+        if (updated == null) { markFailed(ctx); return "Case " + caseId + " no longer exists."; }
         markMutated(ctx);
         emitCase(ctx, updated);
         log.info("tool.addCaseEvidence user={} case={} description={}", p.userId(), caseId, description);
@@ -826,6 +861,7 @@ public class BankingTools {
         audit.toolCalled("escalateCase", p.tenantId());
         status(ctx, "Escalating " + caseId + " to a human agent…");
         var updated = banking.escalateCase(caseId);
+        if (updated == null) { markFailed(ctx); return "Case " + caseId + " no longer exists."; }
         markMutated(ctx);
         emitCase(ctx, updated);
         log.info("tool.escalateCase user={} case={}", p.userId(), caseId);

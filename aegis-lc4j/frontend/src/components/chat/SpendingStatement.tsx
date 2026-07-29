@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { Receipt } from "lucide-react";
 import type { StatementData } from "@/lib/sse";
@@ -17,7 +18,7 @@ const CATEGORY_TINT: Record<string, string> = {
   Other: "bg-muted",
 };
 
-export function SpendingStatement({ statement }: { statement: StatementData }) {
+export const SpendingStatement = memo(function SpendingStatement({ statement }: { statement: StatementData }) {
   const entries = Object.entries(statement.byCategory).sort(
     (a, b) => CATEGORY_ORDER.indexOf(a[0]) - CATEGORY_ORDER.indexOf(b[0]),
   );
@@ -67,4 +68,4 @@ export function SpendingStatement({ statement }: { statement: StatementData }) {
       </div>
     </motion.div>
   );
-}
+});

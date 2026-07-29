@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { motion } from "framer-motion";
 import clsx from "clsx";
 import { PiggyBank, Wallet } from "lucide-react";
@@ -13,7 +14,7 @@ const TYPE_STYLE: Record<AccountData["type"], { accent: string; icon: typeof Wal
 const money = (n: number) =>
   n.toLocaleString(undefined, { style: "currency", currency: "USD" });
 
-export function AccountCards({ accounts }: { accounts: AccountData[] }) {
+export const AccountCards = memo(function AccountCards({ accounts }: { accounts: AccountData[] }) {
   if (accounts.length === 0) return null;
 
   return (
@@ -41,4 +42,4 @@ export function AccountCards({ accounts }: { accounts: AccountData[] }) {
       })}
     </div>
   );
-}
+});

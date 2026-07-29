@@ -1,11 +1,12 @@
 "use client";
 
+import { memo } from "react";
 import { motion } from "framer-motion";
 import clsx from "clsx";
 import { Bell, BellOff, Mail, Phone, Plane } from "lucide-react";
 import type { ProfileData } from "@/lib/sse";
 
-export function ProfileCard({ profile }: { profile: ProfileData }) {
+export const ProfileCard = memo(function ProfileCard({ profile }: { profile: ProfileData }) {
   const travelActive = !!profile.travelNoticeUntil;
 
   return (
@@ -56,4 +57,4 @@ export function ProfileCard({ profile }: { profile: ProfileData }) {
       </div>
     </motion.div>
   );
-}
+});

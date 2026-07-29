@@ -1,5 +1,7 @@
 package com.aegis.merged.guardrails;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -20,6 +22,8 @@ import java.util.concurrent.atomic.AtomicLong;
 @Component
 public class BudgetGuard {
 
+    private static final Logger log = LoggerFactory.getLogger(BudgetGuard.class);
+
     public static class BudgetExceededException extends RuntimeException {
         public BudgetExceededException(String tenant) {
             super("Token budget exceeded for tenant: " + tenant);
@@ -36,6 +40,16 @@ public class BudgetGuard {
             return val
             """;
     private static final RedisScript<Long> INCR = new DefaultRedisScript<>(INCR_SCRIPT, Long.class);
+
+    private static final String CHECK_SCRIPT = """
+            local used = tonumber(redis.call('GET', KEYS[1]))
+            if used == nil then used = 0 end
+            local limit = tonumber(redis.call('GET', KEYS[2]))
+            if limit == nil then limit = tonumber(ARGV[1]) end
+            if used >= limit then return 0 end
+            return 1
+            """;
+    private static final RedisScript<Long> CHECK = new DefaultRedisScript<>(CHECK_SCRIPT, Long.class);
 
     private record Window(long epochDay, AtomicLong used) {
     }
@@ -65,13 +79,33 @@ public class BudgetGuard {
 
     private long budgetFor(String tenant) {
         if (redis.isPresent()) {
-            String v = redis.get().opsForValue().get("aegis:budget:limit:" + tenant);
-            return v != null ? Long.parseLong(v) : defaultBudget;
+            try {
+                String v = redis.get().opsForValue().get("aegis:budget:limit:" + tenant);
+                return v != null ? Long.parseLong(v) : defaultBudget;
+            } catch (Exception e) {
+                log.warn("budget.redis.failed fail-open tenant={} err={}", tenant, e.toString());
+                return defaultBudget;
+            }
         }
         return budgets.getOrDefault(tenant, defaultBudget);
     }
 
     public void checkOrThrow(String tenant) {
+        if (redis.isPresent()) {
+            try {
+                Long allowed = redis.get().execute(CHECK,
+                        List.of(dailyKey(tenant), "aegis:budget:limit:" + tenant),
+                        String.valueOf(defaultBudget));
+                if (allowed != null && allowed == 0L) {
+                    throw new BudgetExceededException(tenant);
+                }
+            } catch (BudgetExceededException e) {
+                throw e;
+            } catch (Exception e) {
+                log.warn("budget.redis.failed fail-open tenant={} err={}", tenant, e.toString());
+            }
+            return;
+        }
         if (consumed(tenant) >= budgetFor(tenant)) {
             throw new BudgetExceededException(tenant);
         }
@@ -79,17 +113,26 @@ public class BudgetGuard {
 
     public void record(String tenant, long tokens) {
         if (redis.isPresent()) {
-            redis.get().execute(INCR, List.of(dailyKey(tenant)),
-                    String.valueOf(tokens), String.valueOf(secondsUntilNextUtcDay()));
-        } else {
-            todays(tenant).addAndGet(tokens);
+            try {
+                redis.get().execute(INCR, List.of(dailyKey(tenant)),
+                        String.valueOf(tokens), String.valueOf(secondsUntilNextUtcDay()));
+            } catch (Exception e) {
+                log.warn("budget.redis.failed tenant={} err={}", tenant, e.toString());
+            }
+            return;
         }
+        todays(tenant).addAndGet(tokens);
     }
 
     public long consumed(String tenant) {
         if (redis.isPresent()) {
-            String v = redis.get().opsForValue().get(dailyKey(tenant));
-            return v != null ? Long.parseLong(v) : 0L;
+            try {
+                String v = redis.get().opsForValue().get(dailyKey(tenant));
+                return v != null ? Long.parseLong(v) : 0L;
+            } catch (Exception e) {
+                log.warn("budget.redis.failed fail-open tenant={} err={}", tenant, e.toString());
+                return 0L;
+            }
         }
         return todays(tenant).get();
     }
@@ -101,7 +144,7 @@ public class BudgetGuard {
     private static long secondsUntilNextUtcDay() {
         ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
         ZonedDateTime midnight = now.toLocalDate().plusDays(1).atStartOfDay(ZoneOffset.UTC);
-        return Duration.between(now, midnight).getSeconds() + 60; 
+        return Duration.between(now, midnight).getSeconds() + 60;
     }
 
     private AtomicLong todays(String tenant) {

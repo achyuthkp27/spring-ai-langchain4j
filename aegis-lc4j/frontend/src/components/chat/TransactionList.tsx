@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { motion } from "framer-motion";
 import clsx from "clsx";
 import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
@@ -10,7 +11,7 @@ const money = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
-export function TransactionList({ transactions }: { transactions: TransactionData[] }) {
+export const TransactionList = memo(function TransactionList({ transactions }: { transactions: TransactionData[] }) {
   if (transactions.length === 0) return null;
 
   return (
@@ -48,4 +49,4 @@ export function TransactionList({ transactions }: { transactions: TransactionDat
       })}
     </div>
   );
-}
+});

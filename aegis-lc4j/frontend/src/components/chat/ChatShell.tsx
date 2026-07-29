@@ -38,7 +38,7 @@ export function ChatShell() {
   const { profile, bankName, switchTo } = useSession();
   const identityKey = profile ? `${profile.tenantId}:${profile.userId}` : null;
   const { conversations, activeId, setActiveId, create, titleFrom, remove } = useConversations(identityKey);
-  const { messages, statuses, busy, historyError, send, loadHistory } = useChatStream(activeId);
+  const { messages, statuses, busy, historyError, send, stop, loadHistory } = useChatStream(activeId);
   const [menuOpen, setMenuOpen] = useState(false);
   const [dark, setDark] = useState(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -56,9 +56,9 @@ export function ChatShell() {
 
   useEffect(() => {
     if (nearBottomRef.current) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      bottomRef.current?.scrollIntoView({ behavior: busy ? "auto" : "smooth" });
     }
-  }, [messages, statuses]);
+  }, [messages, statuses, busy]);
 
   const handleScroll = () => {
     const el = mainRef.current;
@@ -96,6 +96,14 @@ export function ChatShell() {
 
   const lastIsStreamingEmpty =
     busy && messages.length > 0 && messages[messages.length - 1].text === "";
+
+  const lastMessage = messages[messages.length - 1];
+  const liveAnnouncement =
+    lastMessage?.role === "assistant" && lastMessage.streaming
+      ? "Assistant is responding…"
+      : lastMessage?.role === "assistant" && !lastMessage.streaming
+        ? lastMessage.text
+        : "";
 
   return (
     <div className="flex h-dvh">
@@ -138,11 +146,10 @@ export function ChatShell() {
 
         {}
         <main ref={mainRef} onScroll={handleScroll} className="relative flex-1 overflow-y-auto px-4 py-5">
-          <div
-            className="mx-auto flex max-w-2xl flex-col gap-3"
-            aria-live="polite"
-            aria-relevant="additions text"
-          >
+          <div aria-live="polite" className="sr-only">
+            {liveAnnouncement}
+          </div>
+          <div className="mx-auto flex max-w-2xl flex-col gap-3">
             {messages.length === 0 && (
               <motion.div
                 initial={{ opacity: 0, y: 12 }}
@@ -211,7 +218,7 @@ export function ChatShell() {
         {}
         <footer className="px-4 pb-4 pt-1">
           <div className="mx-auto max-w-2xl">
-            <Composer onSend={handleSend} onNewChat={create} disabled={busy} />
+            <Composer onSend={handleSend} onNewChat={create} onStop={stop} disabled={busy} />
 
             {messages.length === 0 && (
               <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

@@ -36,7 +36,6 @@ public class SecurityConfig {
         config.setAllowedOrigins(origins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
-        config.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
@@ -59,7 +58,8 @@ public class SecurityConfig {
 
                         .requestMatchers("/sse", "/mcp/**").authenticated()
 
-                        .requestMatchers("/actuator/prometheus").hasAuthority("PERM_admin:all")
+                        .requestMatchers("/actuator/prometheus", "/actuator/metrics/**", "/actuator/info")
+                        .hasAuthority("PERM_admin:all")
 
                         .requestMatchers("/api/admin/**").hasAuthority("PERM_admin:all")
                         

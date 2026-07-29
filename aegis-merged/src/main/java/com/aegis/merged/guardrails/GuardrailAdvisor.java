@@ -105,14 +105,12 @@ public class GuardrailAdvisor implements CallAdvisor {
         return response;
     }
 
+    private static final java.util.regex.Pattern TOOL_CALL_SHAPE = java.util.regex.Pattern.compile(
+            "\\{\\s*\"name\"\\s*:\\s*\"[^\"]*\"\\s*,\\s*\"(parameters|arguments)\"\\s*:\\s*\\{");
+
     public static boolean looksLikeLeakedToolCall(String text) {
         if (text == null) return false;
-        String t = text.trim();
-        if (!t.contains("{") || !t.contains("}")) return false;
-        boolean hasName = t.contains("\"name\"");
-        boolean hasArgs = t.contains("\"parameters\"") || t.contains("\"arguments\"");
-        
-        return hasName && hasArgs;
+        return TOOL_CALL_SHAPE.matcher(text).find();
     }
 
     private ChatClientResponse refusal(ChatClientRequest request, String message) {

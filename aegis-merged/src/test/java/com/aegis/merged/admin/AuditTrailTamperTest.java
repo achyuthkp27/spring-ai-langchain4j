@@ -36,9 +36,13 @@ class AuditTrailTamperTest {
 
     @BeforeEach
     void freshTable() {
-        jdbc.execute("DROP TABLE IF EXISTS assistant_audit_event");
+        var flyway = org.flywaydb.core.Flyway.configure()
+                .dataSource(jdbc.getDataSource())
+                .cleanDisabled(false)
+                .load();
+        flyway.clean();
+        flyway.migrate();
         audit = new AuditTrail(jdbc);
-        audit.createSchema();
     }
 
     private void waitForRowCount(int expected) throws InterruptedException {

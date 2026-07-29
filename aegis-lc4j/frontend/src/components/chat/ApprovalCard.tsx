@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { motion } from "framer-motion";
 import clsx from "clsx";
 import { Clock3, ShieldCheck } from "lucide-react";
@@ -14,7 +15,7 @@ function statusTone(status: string): "good" | "warning" | "critical" {
 
 const money = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-export function ApprovalCard({ approval }: { approval: ApprovalData }) {
+export const ApprovalCard = memo(function ApprovalCard({ approval }: { approval: ApprovalData }) {
   const tone = statusTone(approval.status);
   const pending = tone === "warning";
 
@@ -51,4 +52,4 @@ export function ApprovalCard({ approval }: { approval: ApprovalData }) {
       </p>
     </motion.div>
   );
-}
+});

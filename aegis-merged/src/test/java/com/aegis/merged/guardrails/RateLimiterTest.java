@@ -39,4 +39,20 @@ class RateLimiterTest {
 
         assertThat(limiter.allow("achu-bank", "user-b")).isTrue();
     }
+
+    @Test
+    @DisplayName("Tenant bucket is untouched by requests denied at the user-bucket stage")
+    void tenantBucketUntouchedOnUserDenial() {
+        var limiter = new RateLimiter(Optional.empty(), 5, 1.0, 8, 1.0);
+
+        for (int i = 0; i < 5; i++) assertThat(limiter.allow("t", "user-a")).isTrue();
+        assertThat(limiter.allow("t", "user-a")).isFalse();
+
+        for (int i = 0; i < 10; i++) limiter.allow("t", "user-a");
+
+        int userBSuccesses = 0;
+        for (int i = 0; i < 5; i++) if (limiter.allow("t", "user-b")) userBSuccesses++;
+
+        assertThat(userBSuccesses).isEqualTo(3);
+    }
 }

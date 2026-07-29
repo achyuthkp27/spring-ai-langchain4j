@@ -241,25 +241,25 @@ public class AssistantController {
         Sinks.Many<String> statusSink = Sinks.many().unicast().onBackpressureBuffer();
         java.util.function.Consumer<String> statusFn = statusSink::tryEmitNext;
 
-        int turnSeq = widgetHistoryStore.nextTurnSeq(memoryKey);
+        List<PendingWidget> pendingWidgets = new java.util.concurrent.CopyOnWriteArrayList<>();
         Sinks.Many<java.util.List<com.aegis.merged.domain.BankingService.Card>> cardsSink = Sinks.many().unicast().onBackpressureBuffer();
-        var cardsFn = widgetChannel(cardsSink, memoryKey, turnSeq, "cards");
+        var cardsFn = widgetChannel(cardsSink, pendingWidgets, "cards");
         Sinks.Many<java.util.List<com.aegis.merged.domain.BankingService.Account>> accountsSink = Sinks.many().unicast().onBackpressureBuffer();
-        var accountsFn = widgetChannel(accountsSink, memoryKey, turnSeq, "accounts");
+        var accountsFn = widgetChannel(accountsSink, pendingWidgets, "accounts");
         Sinks.Many<java.util.List<com.aegis.merged.domain.BankingService.Transaction>> transactionsSink = Sinks.many().unicast().onBackpressureBuffer();
-        var transactionsFn = widgetChannel(transactionsSink, memoryKey, turnSeq, "transactions");
+        var transactionsFn = widgetChannel(transactionsSink, pendingWidgets, "transactions");
         Sinks.Many<com.aegis.merged.domain.BankingService.DisputeCase> casesSink = Sinks.many().unicast().onBackpressureBuffer();
-        var casesFn = widgetChannel(casesSink, memoryKey, turnSeq, "case");
+        var casesFn = widgetChannel(casesSink, pendingWidgets, "case");
         Sinks.Many<com.aegis.merged.domain.BankingService.Approval> approvalsSink = Sinks.many().unicast().onBackpressureBuffer();
-        var approvalsFn = widgetChannel(approvalsSink, memoryKey, turnSeq, "approval");
+        var approvalsFn = widgetChannel(approvalsSink, pendingWidgets, "approval");
         Sinks.Many<java.util.List<BankingTools.Citation>> citationsSink = Sinks.many().unicast().onBackpressureBuffer();
-        var citationsFn = widgetChannel(citationsSink, memoryKey, turnSeq, "citations");
+        var citationsFn = widgetChannel(citationsSink, pendingWidgets, "citations");
         Sinks.Many<java.util.List<com.aegis.merged.domain.BankingService.LedgerEntry>> ledgerSink = Sinks.many().unicast().onBackpressureBuffer();
-        var ledgerFn = widgetChannel(ledgerSink, memoryKey, turnSeq, "ledger");
+        var ledgerFn = widgetChannel(ledgerSink, pendingWidgets, "ledger");
         Sinks.Many<com.aegis.merged.domain.BankingService.CustomerProfile> profileSink = Sinks.many().unicast().onBackpressureBuffer();
-        var profileFn = widgetChannel(profileSink, memoryKey, turnSeq, "profile");
+        var profileFn = widgetChannel(profileSink, pendingWidgets, "profile");
         Sinks.Many<BankingTools.SpendingSummary> statementSink = Sinks.many().unicast().onBackpressureBuffer();
-        var statementFn = widgetChannel(statementSink, memoryKey, turnSeq, "statement");
+        var statementFn = widgetChannel(statementSink, pendingWidgets, "statement");
 
         ModelRouter.Tier tier = router.decide(request.message(), memoryKey);
         ChatClient model = tier == ModelRouter.Tier.COMPLEX
@@ -293,63 +293,41 @@ public class AssistantController {
                 .toolContext(toolContext)
                 .advisors(a -> a
                         .param(ChatMemory.CONVERSATION_ID, memoryKey)
-                        .param(GuardrailAdvisor.TENANT_PARAM, tenantId))
+                        .param(GuardrailAdvisor.TENANT_PARAM, tenantId)
+                        .param(GuardrailAdvisor.USER_PARAM, userId))
                 .stream()
                 .chatResponse());
 
-        Mono<CollectedAnswer> firstAttempt = collectAnswer(callModel.get());
-        Mono<CollectedAnswer> finalAnswer = firstAttempt.flatMap(first -> {
-            if (!looksTruncated(first.text())) return Mono.just(first);
-            if (mutated.get()) {
+        StreamState state = new StreamState();
+        Flux<ServerSentEvent<String>> answer = streamTokens(callModel.get(), state)
+                .concatWith(Mono.defer(() -> {
+                    boolean truncated = looksTruncatedByFinishReason(state.finishReason);
+                    if (truncated) {
+                        log.warn("assistant.answer.truncated finishReason={} key={} chars={}",
+                                state.finishReason, memoryKey, state.rawFull.length());
+                    }
 
-                log.warn("assistant.answer.looksTruncated NOT retrying (mutating tool already ran) "
-                        + "key={} chars={}", memoryKey, first.text().length());
-                return Mono.just(first);
-            }
-            log.warn("assistant.answer.looksTruncated retrying once key={} chars={}", memoryKey, first.text().length());
-            return collectAnswer(callModel.get())
-                    .map(retry -> looksTruncated(retry.text()) && retry.text().length() <= first.text().length()
-                            ? first : retry)
-                    .onErrorReturn(first);
-        });
+                    String redactedAnswer = piiRedactor.redact(state.sanitized.toString());
+                    if (isSafeToCache(redactedAnswer, dynamic.get() || mutated.get() || truncated)) {
+                        semanticCache.put(tenantId, request.message(), redactedAnswer);
+                    }
+                    router.markLowConfidence(memoryKey, redactedAnswer, toolFailed.get() || truncated);
 
-        Flux<ServerSentEvent<String>> answer = finalAnswer.flatMapMany(collected -> {
-            String rawFull = collected.text();
-            List<ServerSentEvent<String>> out = new ArrayList<>();
+                    int turnSeq = widgetHistoryStore.nextTurnSeq(memoryKey);
+                    for (PendingWidget w : pendingWidgets) {
+                        widgetHistoryStore.save(memoryKey, turnSeq, w.widgetType(), w.payload());
+                    }
 
-            StringBuilder sanitized = new StringBuilder();
-            String remaining = rawFull;
-            while (true) {
-
-                int b = lastSafeBoundary(remaining);
-                if (b <= 0) break;
-                String segment = remaining.substring(0, b);
-                if (!GuardrailAdvisor.looksLikeLeakedToolCall(segment)) sanitized.append(segment);
-                out.add(tokenEvent(segment));   
-                remaining = remaining.substring(b);
-            }
-            if (!remaining.isEmpty()) {
-                if (!GuardrailAdvisor.looksLikeLeakedToolCall(remaining)) sanitized.append(remaining);
-                out.add(tokenEvent(remaining));
-            }
-
-            String redactedAnswer = piiRedactor.redact(sanitized.toString());
-            if (isSafeToCache(redactedAnswer, dynamic.get())) {
-                semanticCache.put(tenantId, request.message(), redactedAnswer);
-            }
-            router.markLowConfidence(memoryKey, redactedAnswer, toolFailed.get());
-
-            var usage = collected.usage();
-            if (usage != null && usage.getTotalTokens() != null && usage.getTotalTokens() > 0) {
-                budgetGuard.record(tenantId, usage.getTotalTokens());
-            } else {
-                budgetGuard.record(tenantId, Math.max(1, redactedAnswer.length() / 4));
-            }
-            long ms = ms(start);
-            audit.record(tenantId, userId, cid, "llm", ms, redactedAnswer.length(), redactedQ);
-            out.add(metaEvent(new ChatReply(cid, redactedAnswer, "llm", ms, null, null)));
-            return Flux.fromIterable(out);
-        });
+                    var usage = state.usage;
+                    if (usage != null && usage.getTotalTokens() != null && usage.getTotalTokens() > 0) {
+                        budgetGuard.record(tenantId, usage.getTotalTokens());
+                    } else {
+                        budgetGuard.record(tenantId, Math.max(1, redactedAnswer.length() / 4));
+                    }
+                    long ms = ms(start);
+                    audit.record(tenantId, userId, cid, "llm", ms, redactedAnswer.length(), redactedQ);
+                    return Mono.just(metaEvent(new ChatReply(cid, redactedAnswer, "llm", ms, null, null)));
+                }));
 
         Flux<ServerSentEvent<String>> statusEvents = statusSink.asFlux()
                 .map(s -> ServerSentEvent.<String>builder().event("status")
@@ -382,6 +360,10 @@ public class AssistantController {
                 .map(s -> ServerSentEvent.<String>builder().event("statement")
                         .data(toJson(s)).build());
         answer = answer.doFinally(sig -> {
+            if (sig == reactor.core.publisher.SignalType.CANCEL) {
+                audit.record(tenantId, userId, cid, "cancelled", ms(start), state.sanitized.length(), redactedQ);
+                persistPendingWidgets(memoryKey, pendingWidgets);
+            }
             statusSink.tryEmitComplete();
             cardsSink.tryEmitComplete();
             accountsSink.tryEmitComplete();
@@ -419,11 +401,22 @@ public class AssistantController {
         return (System.nanoTime() - startNanos) / 1_000_000;
     }
 
+    record PendingWidget(String widgetType, String payload) {
+    }
+
+    void persistPendingWidgets(String memoryKey, List<PendingWidget> pendingWidgets) {
+        if (pendingWidgets.isEmpty()) return;
+        int turnSeq = widgetHistoryStore.nextTurnSeq(memoryKey);
+        for (PendingWidget w : pendingWidgets) {
+            widgetHistoryStore.save(memoryKey, turnSeq, w.widgetType(), w.payload());
+        }
+    }
+
     private <T> java.util.function.Consumer<T> widgetChannel(
-            Sinks.Many<T> sink, String memoryKey, int turnSeq, String widgetType) {
+            Sinks.Many<T> sink, List<PendingWidget> pendingWidgets, String widgetType) {
         return value -> {
             sink.tryEmitNext(value);
-            widgetHistoryStore.save(memoryKey, turnSeq, widgetType, toJson(value));
+            pendingWidgets.add(new PendingWidget(widgetType, toJson(value)));
         };
     }
 
@@ -437,35 +430,65 @@ public class AssistantController {
         return -1;
     }
 
-    private record CollectedAnswer(String text, org.springframework.ai.chat.metadata.Usage usage) {
+    static final class StreamState {
+        final StringBuffer pending = new StringBuffer();
+        final StringBuffer rawFull = new StringBuffer();
+        final StringBuffer sanitized = new StringBuffer();
+        final ThinkTagFilter filter = new ThinkTagFilter();
+        volatile org.springframework.ai.chat.metadata.Usage usage;
+        volatile String finishReason;
     }
 
-    private static Mono<CollectedAnswer> collectAnswer(Flux<org.springframework.ai.chat.model.ChatResponse> responses) {
-        ThinkTagFilter filter = new ThinkTagFilter();
-        var lastUsage = new java.util.concurrent.atomic.AtomicReference<org.springframework.ai.chat.metadata.Usage>();
-        return responses
+    Flux<ServerSentEvent<String>> streamTokens(
+            Flux<org.springframework.ai.chat.model.ChatResponse> responses, StreamState state) {
+        Flux<ServerSentEvent<String>> chunks = responses
                 .doOnNext(cr -> {
-                    if (cr.getMetadata() == null) return;
-                    var u = cr.getMetadata().getUsage();
-                    if (u != null && u.getTotalTokens() != null && u.getTotalTokens() > 0) lastUsage.set(u);
+                    if (cr.getMetadata() != null) {
+                        var u = cr.getMetadata().getUsage();
+                        if (u != null && u.getTotalTokens() != null && u.getTotalTokens() > 0) state.usage = u;
+                    }
+                    if (cr.getResult() != null && cr.getResult().getMetadata() != null) {
+                        String fr = cr.getResult().getMetadata().getFinishReason();
+                        if (fr != null && !fr.isBlank()) state.finishReason = fr;
+                    }
                 })
-                .map(cr -> cr.getResult() != null && cr.getResult().getOutput() != null
+                .mapNotNull(cr -> cr.getResult() != null && cr.getResult().getOutput() != null
                         ? cr.getResult().getOutput().getText() : null)
-                .collectList()
-                .map(chunks -> {
-                    StringBuilder sb = new StringBuilder();
-                    for (String raw : chunks) if (raw != null) sb.append(filter.accept(raw));
-                    sb.append(filter.flush());
-                    return new CollectedAnswer(sb.toString(), lastUsage.get());
-                });
+                .map(state.filter::accept)
+                .concatMap(chunk -> Flux.fromIterable(drainBoundaries(state, chunk)));
+        return chunks.concatWith(Mono.fromSupplier(() -> flushRemainder(state)).flux()
+                .filter(java.util.Objects::nonNull));
     }
 
-    private static boolean looksTruncated(String answer) {
-        if (answer == null) return true;
-        String t = answer.strip();
-        if (t.isEmpty()) return true;
-        char last = t.charAt(t.length() - 1);
-        return "!?.\"')]}”’".indexOf(last) < 0;
+    private List<ServerSentEvent<String>> drainBoundaries(StreamState state, String chunk) {
+        state.pending.append(chunk);
+        List<ServerSentEvent<String>> out = new ArrayList<>();
+        int b;
+        while ((b = lastSafeBoundary(state.pending)) > 0) {
+            String segment = state.pending.substring(0, b);
+            state.pending.delete(0, b);
+            state.rawFull.append(segment);
+            if (!GuardrailAdvisor.looksLikeLeakedToolCall(segment)) state.sanitized.append(segment);
+            out.add(tokenEvent(segment));
+        }
+        return out;
+    }
+
+    private ServerSentEvent<String> flushRemainder(StreamState state) {
+        String flushed = state.filter.flush();
+        if (!flushed.isEmpty()) state.pending.append(flushed);
+        if (state.pending.length() == 0) return null;
+        String segment = state.pending.toString();
+        state.pending.setLength(0);
+        state.rawFull.append(segment);
+        if (!GuardrailAdvisor.looksLikeLeakedToolCall(segment)) state.sanitized.append(segment);
+        return tokenEvent(segment);
+    }
+
+    static boolean looksTruncatedByFinishReason(String finishReason) {
+        if (finishReason == null) return false;
+        String r = finishReason.trim();
+        return r.equalsIgnoreCase("length") || r.equalsIgnoreCase("max_tokens");
     }
 
     private ServerSentEvent<String> tokenEvent(String line) {
@@ -488,8 +511,8 @@ public class AssistantController {
                 metaEvent(reply));
     }
 
-    private static boolean isSafeToCache(String answer, boolean dynamic) {
-        if (dynamic || answer == null) return false;
+    static boolean isSafeToCache(String answer, boolean notCacheable) {
+        if (notCacheable || answer == null) return false;
         return !AnswerConfidence.looksLowConfidence(answer);
     }
 

@@ -1,10 +1,11 @@
 "use client";
 
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { FileText } from "lucide-react";
 import type { CitationData } from "@/lib/sse";
 
-export function CitationChips({ citations }: { citations: CitationData[] }) {
+export const CitationChips = memo(function CitationChips({ citations }: { citations: CitationData[] }) {
   if (citations.length === 0) return null;
 
   return (
@@ -24,4 +25,4 @@ export function CitationChips({ citations }: { citations: CitationData[] }) {
       ))}
     </div>
   );
-}
+});

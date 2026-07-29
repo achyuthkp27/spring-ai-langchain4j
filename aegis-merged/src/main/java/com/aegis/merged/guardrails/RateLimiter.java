@@ -1,5 +1,6 @@
 package com.aegis.merged.guardrails;
 
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -7,10 +8,10 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 @Component
 public class RateLimiter {
@@ -50,7 +51,11 @@ public class RateLimiter {
     private record Bucket(double tokens, long lastRefillNanos) {
     }
 
-    private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Bucket> buckets = Caffeine.newBuilder()
+            .maximumSize(50_000)
+            .expireAfterAccess(Duration.ofHours(2))
+            .<String, Bucket>build()
+            .asMap();
     private final Optional<StringRedisTemplate> redis;
 
     public RateLimiter(Optional<StringRedisTemplate> redis) {
@@ -78,11 +83,10 @@ public class RateLimiter {
         if (userId == null || userId.isBlank()) {
             return allow(tenantId);
         }
-        boolean userOk = allowBucket("aegis:ratelimit:user:" + tenantId + ":" + userId,
-                userCapacity, userRefillPerSec);
-        boolean tenantOk = allowBucket("aegis:ratelimit:tenant:" + tenantId,
-                tenantCapacity, tenantRefillPerSec);
-        return userOk && tenantOk;
+        if (!allowBucket("aegis:ratelimit:user:" + tenantId + ":" + userId, userCapacity, userRefillPerSec)) {
+            return false;
+        }
+        return allowBucket("aegis:ratelimit:tenant:" + tenantId, tenantCapacity, tenantRefillPerSec);
     }
 
     private boolean allowBucket(String key, double capacity, double refillPerSec) {
@@ -98,16 +102,20 @@ public class RateLimiter {
         return allowed != null && allowed == 1L;
     }
 
-    private synchronized boolean allowLocal(String key, double capacity, double refillPerSec) {
+    private boolean allowLocal(String key, double capacity, double refillPerSec) {
         long now = System.nanoTime();
-        Bucket b = buckets.getOrDefault(key, new Bucket(capacity, now));
-        double elapsedSec = (now - b.lastRefillNanos()) / 1_000_000_000.0;
-        double tokens = Math.min(capacity, b.tokens() + elapsedSec * refillPerSec);
-        if (tokens < 1.0) {
-            buckets.put(key, new Bucket(tokens, now));
-            return false;
-        }
-        buckets.put(key, new Bucket(tokens - 1.0, now));
-        return true;
+        boolean[] allowed = new boolean[1];
+        buckets.compute(key, (k, existing) -> {
+            Bucket b = existing != null ? existing : new Bucket(capacity, now);
+            double elapsedSec = (now - b.lastRefillNanos()) / 1_000_000_000.0;
+            double tokens = Math.min(capacity, b.tokens() + elapsedSec * refillPerSec);
+            if (tokens < 1.0) {
+                allowed[0] = false;
+                return new Bucket(tokens, now);
+            }
+            allowed[0] = true;
+            return new Bucket(tokens - 1.0, now);
+        });
+        return allowed[0];
     }
 }

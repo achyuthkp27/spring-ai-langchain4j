@@ -9,9 +9,14 @@ import java.util.regex.Pattern;
 public class PiiRedactor {
 
     private static final Pattern PAN = Pattern.compile("\\b(?:\\d[ -]?){13,19}\\b");
-    private static final Pattern SSN = Pattern.compile("\\b\\d{3}-\\d{2}-\\d{4}\\b");
-    private static final Pattern IBAN = Pattern.compile("\\b[A-Z]{2}\\d{2}[A-Z0-9]{11,30}\\b");
+    private static final Pattern SSN = Pattern.compile("\\b\\d{3}[-\\s]\\d{2}[-\\s]\\d{4}\\b");
+    private static final Pattern IBAN = Pattern.compile("\\b[A-Z]{2}\\d{2}[A-Z0-9]{11,30}\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern EMAIL = Pattern.compile("\\b[\\w.+-]+@[\\w-]+\\.[\\w.-]+\\b");
+    private static final Pattern PHONE = Pattern.compile(
+            "\\b\\+?(?:\\d{1,3}[-.\\s])?\\(?\\d{2,4}\\)?[-.\\s]\\d{3,4}(?:[-.\\s]\\d{3,4})?\\b");
+    private static final Pattern CARD_CONTEXT = Pattern.compile(
+            "\\b(card|credit card|debit card|pan|account number)\\b", Pattern.CASE_INSENSITIVE);
+    private static final int CARD_CONTEXT_WINDOW = 40;
 
     public String redact(String input) {
         if (input == null || input.isBlank()) {
@@ -22,6 +27,7 @@ public class PiiRedactor {
         out = IBAN.matcher(out).replaceAll("[REDACTED_IBAN]");
         out = redactPan(out);
         out = EMAIL.matcher(out).replaceAll("[REDACTED_EMAIL]");
+        out = PHONE.matcher(out).replaceAll("[REDACTED_PHONE]");
         return out;
     }
 
@@ -30,11 +36,17 @@ public class PiiRedactor {
         StringBuilder sb = new StringBuilder();
         while (m.find()) {
             String digitsOnly = m.group().replaceAll("[ -]", "");
-            m.appendReplacement(sb, Matcher.quoteReplacement(
-                    luhnValid(digitsOnly) ? "[REDACTED_PAN]" : m.group()));
+            boolean redact = luhnValid(digitsOnly) || nearCardContext(input, m.start(), m.end());
+            m.appendReplacement(sb, Matcher.quoteReplacement(redact ? "[REDACTED_PAN]" : m.group()));
         }
         m.appendTail(sb);
         return sb.toString();
+    }
+
+    private static boolean nearCardContext(String input, int start, int end) {
+        int windowStart = Math.max(0, start - CARD_CONTEXT_WINDOW);
+        int windowEnd = Math.min(input.length(), end + CARD_CONTEXT_WINDOW);
+        return CARD_CONTEXT.matcher(input.substring(windowStart, windowEnd)).find();
     }
 
     private static boolean luhnValid(String digits) {

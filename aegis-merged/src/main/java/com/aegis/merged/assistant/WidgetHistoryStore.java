@@ -2,8 +2,6 @@ package com.aegis.merged.assistant;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -44,35 +42,6 @@ public class WidgetHistoryStore {
 
     public WidgetHistoryStore(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
-    }
-
-    @EventListener(ApplicationReadyEvent.class)
-    public void createSchema() {
-        try {
-            jdbc.execute("""
-                    CREATE TABLE IF NOT EXISTS assistant_widget_event (
-                        id BIGSERIAL PRIMARY KEY,
-                        conversation_id VARCHAR(256) NOT NULL,
-                        turn_seq INT NOT NULL,
-                        widget_type VARCHAR(32) NOT NULL,
-                        payload TEXT NOT NULL,
-                        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-                    )
-                    """);
-            jdbc.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_widget_event_conversation
-                        ON assistant_widget_event (conversation_id)
-                    """);
-
-            jdbc.execute("""
-                    CREATE TABLE IF NOT EXISTS assistant_turn_counter (
-                        conversation_id VARCHAR(256) PRIMARY KEY,
-                        next_turn_seq INT NOT NULL DEFAULT 0
-                    )
-                    """);
-        } catch (Exception e) {
-            log.warn("widget-history.schema.create skipped: {}", e.getMessage());
-        }
     }
 
     public int nextTurnSeq(String conversationId) {
@@ -118,14 +87,17 @@ public class WidgetHistoryStore {
         });
     }
 
+    private static final int MAX_WIDGET_ROWS_LOADED = 2000;
+
     public List<WidgetRow> loadForConversation(String conversationId) {
         List<WidgetRow> out = new ArrayList<>();
         jdbc.query("""
                 SELECT turn_seq, widget_type, payload FROM assistant_widget_event
-                WHERE conversation_id = ? ORDER BY id""",
+                WHERE conversation_id = ? ORDER BY id DESC LIMIT ?""",
                 rs -> {
                     out.add(new WidgetRow(rs.getInt("turn_seq"), rs.getString("widget_type"), rs.getString("payload")));
-                }, conversationId);
+                }, conversationId, MAX_WIDGET_ROWS_LOADED);
+        java.util.Collections.reverse(out);
         return out;
     }
 

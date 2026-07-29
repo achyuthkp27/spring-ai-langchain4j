@@ -6,7 +6,7 @@ const CANDIDATES = process.env.BACKEND_URL
   ? [process.env.BACKEND_URL]
   : IS_PROD
     ? []
-    : ["http:
+    : ["http://localhost:8082", "http://localhost:8081", "http://localhost:8080"];
 
 const PROBE_TIMEOUT_MS = 800;
 const FORWARD_TIMEOUT_MS = 30_000;

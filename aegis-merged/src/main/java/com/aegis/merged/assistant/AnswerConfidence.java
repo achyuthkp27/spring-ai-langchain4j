@@ -2,12 +2,12 @@ package com.aegis.merged.assistant;
 
 import com.aegis.merged.guardrails.GuardrailAdvisor;
 
-final class AnswerConfidence {
+public final class AnswerConfidence {
 
     private AnswerConfidence() {
     }
 
-    static boolean looksLowConfidence(String answer) {
+    public static boolean looksLowConfidence(String answer) {
         if (answer == null) return true;
         String a = answer.toLowerCase();
         return a.contains("i don't have")

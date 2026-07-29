@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -17,7 +17,7 @@ import { LedgerReceipt } from "./LedgerReceipt";
 import { SpendingStatement } from "./SpendingStatement";
 import { ProfileCard } from "./ProfileCard";
 
-export function MessageBubble({ message }: { message: Message }) {
+export const MessageBubble = memo(function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
   const [copied, setCopied] = useState(false);
 
@@ -38,6 +38,7 @@ export function MessageBubble({ message }: { message: Message }) {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ type: "spring", stiffness: 380, damping: 30 }}
       className={clsx("group flex w-full items-end gap-2", isUser ? "justify-end" : "justify-start")}
+      aria-live="off"
     >
       {!isUser && (
         <div className="grid h-7 w-7 shrink-0 place-items-center self-start rounded-md bg-foreground text-background">
@@ -104,4 +105,4 @@ export function MessageBubble({ message }: { message: Message }) {
       </div>
     </motion.div>
   );
-}
+});
