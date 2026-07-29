@@ -1,14 +1,8 @@
 # aegis-merged: Spring AI chassis + LC4j security/streaming improvements.
-# Port 8082 — 8080 = original aegis-ai, 8081 = aegis-lc4j.
 server:
   port: 8082
-  # Phase 4 (resilience): let in-flight requests (esp. a streaming SSE turn) finish instead
-  # of being cut off mid-response on deploy/restart.
   shutdown: graceful
   tomcat:
-    # No cap existed at all (CODE_REVIEW.md P4 #9) — max-swallow-size bounds how much of an
-    # oversized request body Tomcat will read-and-discard before responding, so a very large
-    # POST can't tie up a connection thread reading data nobody will use.
     max-swallow-size: 2MB
 
 spring:
@@ -19,14 +13,9 @@ spring:
     name: aegis-merged
 
   mvc:
-    # No timeout existed (CODE_REVIEW.md P4 #9) — bounds how long an async dispatch (the SSE
-    # streaming endpoint's re-dispatch after the body starts sending, see SecurityConfig's
-    # shouldFilterAllDispatcherTypes comment) can sit open before Spring gives up on it.
     async:
       request-timeout: 60000
 
-  # Share the already-running aegis-lc4j Postgres (pgvector) instead of letting
-  # spring-boot-docker-compose spin up a second container on the same port.
   docker:
     compose:
       enabled: false
@@ -41,15 +30,13 @@ spring:
       port: 6379
 
   ai:
-    # Provider selection — the extension point for the Phase 2+ model router.
-    # Only the selected provider's beans are created; the rest stay dormant.
     model:
       chat: ollama
-      embedding: ollama        # Phase 1 (RAG) — local embeddings, zero egress
+      embedding: ollama
       image: none
-      moderation: none         # enabled in Phase 4 (guardrails)
+      moderation: none
       audio:
-        transcription: none    # Phase 6 stretch: voice notes on disputes
+        transcription: none
         speech: none
 
     # Resilience: retry transient model errors with backoff (spring-ai-retry).
@@ -63,30 +50,22 @@ spring:
     ollama:
       base-url: http://localhost:11434
       init:
-        pull-model-strategy: never   # run `ollama pull qwen2.5:7b && ollama pull nomic-embed-text && ollama pull all-minilm`
-        # nomic-embed-text = RAG retrieval; all-minilm = semantic-cache query similarity (see CacheConfig)
+        pull-model-strategy: never
       chat:
         options:
           # qwen3.5:4b thinking model; aegis.llm.think=false keeps tool-calling
-          # latency sane (reasoning would run before every tool step).
           model: qwen3.5:4b
           temperature: 0.2
-          num-predict: 512      # ample for concise answers; caps runaway generation
-          # Ollama's default context window (4096) was silently exhausted by the system
-          # prompt + ~20 tool JSON schemas ALONE (~4059 prompt tokens measured live) before a
-          # single turn of conversation — the model then had ~30 tokens left for its whole
-          # answer and got cut off mid-sentence with no error, which looked identical to (and
-          # was initially misdiagnosed as purely) the Spring AI streaming/tool-calling bug
-          # tracked separately. Raised well past prompt size + num-predict + real headroom.
+          num-predict: 512
           num-ctx: 16384
       embedding:
         options:
-          model: nomic-embed-text   # 768-dim local embedding model
+          model: nomic-embed-text
 
     vectorstore:
       pgvector:
         initialize-schema: true
-        dimensions: 768             # must match nomic-embed-text
+        dimensions: 768
         index-type: hnsw
         distance-type: cosine_distance
 
@@ -95,7 +74,6 @@ spring:
         name: aegis-mcp
         version: 0.1.0
         type: SYNC
-        # SSE transport; base message endpoint under /mcp
         sse-message-endpoint: /mcp/message
 
     chat:
@@ -106,30 +84,30 @@ spring:
 
 aegis:
   llm:
-    think: false   # Ollama ThinkOption — disable qwen3.5 reasoning mode
+    think: false
   router:
     enabled: true
     escalation:
-      provider: ollama       # or anthropic (needs ANTHROPIC_API_KEY)
-      model: qwen3.5:9b      # or claude-sonnet-4-5 when provider=anthropic
+      provider: ollama
+      model: qwen3.5:9b
   redis:
-    # Externalizes RateLimiter/BudgetGuard so they hold under horizontal scaling (see
-    # config.RedisConfig). Off by default — single-instance deploys don't need it.
     enabled: false
-  # JwtService rejects any token whose tenantId claim isn't in this list — bounds the unbounded
-  # Micrometer-series / map-key cardinality a forged or self-minted (finding #1) tenantId could
-  # otherwise create (CODE_REVIEW.md P4 #4). Add every tenant this deployment actually serves;
-  # leave blank to disable the check (e.g. a from-scratch demo before any tenant exists).
   known-tenants: achu-bank,globex-bank
+  ratelimit:
+    user-capacity: 20
+    user-refill-per-sec: 1.0
+    tenant-capacity: 200
+    tenant-refill-per-sec: 10.0
+  budget:
+    default-daily-tokens: 100000
+  cache:
+    similarity-threshold: 0.62
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info,metrics,prometheus
-  # Phase 4 (resilience): k8s-style split health checks — readiness (safe to route traffic
-  # to) vs liveness (safe to keep running) are different questions; a DB hiccup should fail
-  # readiness without triggering a container restart that wouldn't fix it.
   endpoint:
     health:
       probes:
@@ -146,16 +124,9 @@ management:
 
 logging:
   level:
-    # SimpleLoggerAdvisor logs full prompts/completions at DEBUG — a real data-leak vector if
-    # left on by default (CODE_REVIEW.md P4 #1: this used to be DEBUG here unconditionally, and
-    # the prod profile below never overrode it back). INFO is the safe default in every profile
-    # except the explicit dev opt-in profile further down.
     org.springframework.ai.chat.client.advisor: INFO
 
 ---
-# Explicit opt-in for the prompt/completion debug logging above — never the default, so a
-# profile flag (not an easy-to-miss line in a shared config file) is what turns on a real
-# data-leak vector. Activate with --spring.profiles.active=dev alongside whatever chat profile.
 spring:
   config:
     activate:
@@ -195,15 +166,6 @@ spring:
           temperature: 0.2
 
 ---
-# Swaps embeddings (RAG retrieval + semantic cache) to OpenAI. Required for any
-# cloud deploy — Ollama isn't available there. Compose with a chat profile:
-#   --spring.profiles.active=openai,openai-embeddings    (all-OpenAI, one API key)
-#   --spring.profiles.active=anthropic,openai-embeddings (Claude chat + OpenAI embeddings,
-#                                                          since Anthropic has no embedding API)
-# text-embedding-3-small is 1536-dim, vs nomic-embed-text's 768 — the vector store
-# dimension MUST match whatever produced the vectors, so pgvector needs a fresh
-# schema/re-ingest when switching (initialize-schema handles a clean database;
-# switching an EXISTING populated store requires dropping vector_store first).
 spring:
   config:
     activate:
@@ -221,12 +183,6 @@ spring:
         dimensions: 1536
 
 ---
-# Phase 4 (resilience) + Phase 2 (secrets): activate alongside a real chat/embedding profile,
-# e.g. --spring.profiles.active=anthropic,openai-embeddings,prod. Structured JSON logs are what
-# a real log pipeline (Datadog/Grafana Loki/ELK) actually wants — human-readable console output
-# is a dev-only convenience this profile deliberately gives up. JwtService also refuses to
-# start under this profile with the default JWT secret (see that class) rather than just
-# warning, since "prod" is the one place that gap can't ship silently.
 spring:
   config:
     activate:

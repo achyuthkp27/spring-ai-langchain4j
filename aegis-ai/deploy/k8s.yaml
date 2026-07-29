@@ -1,17 +1,9 @@
-# AegisAI — production Kubernetes manifests (Phase 6)
-# Reuses the patterns from ../../Answers/... and the kubernetes.md interview doc:
-# resource requests/limits (Guaranteed QoS), HPA, PDB, readiness/liveness probes,
-# a preStop drain, and a NetworkPolicy that isolates the model-egress path.
-#
-# This is a reference deployment; it assumes an image aegis-ai:0.1.0 has been built
-# and pushed, and that Postgres + a model endpoint are reachable in-cluster.
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
   name: aegis
   labels:
-    # Pod Security Admission: enforce the hardened profile (kubernetes.md §9 Q3)
     pod-security.kubernetes.io/enforce: restricted
 ---
 apiVersion: apps/v1
@@ -27,7 +19,7 @@ spec:
     type: RollingUpdate
     rollingUpdate:
       maxSurge: 1
-      maxUnavailable: 0          # never drop capacity mid-rollout
+      maxUnavailable: 0
   template:
     metadata:
       labels: { app: aegis-copilot }
@@ -44,7 +36,7 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: ["ALL"] }
-          resources:                       # requests == limits → Guaranteed QoS
+          resources:
             requests: { cpu: "1", memory: "1Gi" }
             limits:   { cpu: "1", memory: "1Gi" }
           env:
@@ -58,12 +50,12 @@ spec:
             httpGet: { path: /actuator/health/readiness, port: 8080 }
             initialDelaySeconds: 10
             periodSeconds: 5
-          livenessProbe:                   # cheap, dependency-free (kubernetes.md §7 Q2)
+          livenessProbe:
             httpGet: { path: /actuator/health/liveness, port: 8080 }
             periodSeconds: 10
           lifecycle:
             preStop:
-              exec: { command: ["sh", "-c", "sleep 8"] }  # drain window (§7 Q3/Q5)
+              exec: { command: ["sh", "-c", "sleep 8"] }
           volumeMounts:
             - { name: tmp, mountPath: /tmp }
       terminationGracePeriodSeconds: 45
@@ -103,9 +95,6 @@ spec:
   selector:
     matchLabels: { app: aegis-copilot }
 ---
-# Default-deny egress, then allow only DB, DNS, and the model endpoint.
-# This is the LLM data-egress control: the app can't call arbitrary external
-# hosts, mitigating exfiltration if a prompt-injection ever slips a guardrail.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -118,7 +107,7 @@ spec:
   egress:
     - to: [{ podSelector: { matchLabels: { app: postgres } } }]
       ports: [{ port: 5432 }]
-    - to: [{ namespaceSelector: {} }]         # DNS
+    - to: [{ namespaceSelector: {} }]
       ports: [{ port: 53, protocol: UDP }]
-    - to: [{ podSelector: { matchLabels: { app: ollama } } }]  # in-cluster model (sovereign mode)
+    - to: [{ podSelector: { matchLabels: { app: ollama } } }]
       ports: [{ port: 11434 }]

@@ -3,15 +3,13 @@ spring:
     name: aegis-ai
 
   ai:
-    # Provider selection — the extension point for the Phase 2+ model router.
-    # Only the selected provider's beans are created; the rest stay dormant.
     model:
       chat: ollama
-      embedding: ollama        # Phase 1 (RAG) — local embeddings, zero egress
+      embedding: ollama
       image: none
-      moderation: none         # enabled in Phase 4 (guardrails)
+      moderation: none
       audio:
-        transcription: none    # Phase 6 stretch: voice notes on disputes
+        transcription: none
         speech: none
 
     # Resilience: retry transient model errors with backoff (spring-ai-retry).
@@ -25,23 +23,21 @@ spring:
     ollama:
       base-url: http://localhost:11434
       init:
-        pull-model-strategy: never   # run `ollama pull qwen2.5:7b && ollama pull nomic-embed-text && ollama pull all-minilm`
-        # nomic-embed-text = RAG retrieval; all-minilm = semantic-cache query similarity (see CacheConfig)
+        pull-model-strategy: never
       chat:
         options:
           # Qwen2.5-7B-Instruct: strong tool-calling + grounding (fixes the
-          # JSON-leak, wrong-tool, and hallucination issues llama3.2:3b had).
           model: qwen2.5:7b
           temperature: 0.2
-          num-predict: 512      # ample for concise answers; caps runaway generation
+          num-predict: 512
       embedding:
         options:
-          model: nomic-embed-text   # 768-dim local embedding model
+          model: nomic-embed-text
 
     vectorstore:
       pgvector:
         initialize-schema: true
-        dimensions: 768             # must match nomic-embed-text
+        dimensions: 768
         index-type: hnsw
         distance-type: cosine_distance
 
@@ -50,7 +46,6 @@ spring:
         name: aegis-mcp
         version: 0.1.0
         type: SYNC
-        # SSE transport; base message endpoint under /mcp
         sse-message-endpoint: /mcp/message
 
     chat:
@@ -70,8 +65,6 @@ management:
 
 logging:
   level:
-    # SimpleLoggerAdvisor logs full prompts/completions at DEBUG — dev only,
-    # this is a data-leak vector in production (see design doc, Observability)
     org.springframework.ai.chat.client.advisor: DEBUG
 
 ---
@@ -105,15 +98,6 @@ spring:
           temperature: 0.2
 
 ---
-# Swaps embeddings (RAG retrieval + semantic cache) to OpenAI. Required for any
-# cloud deploy — Ollama isn't available there. Compose with a chat profile:
-#   --spring.profiles.active=openai,openai-embeddings    (all-OpenAI, one API key)
-#   --spring.profiles.active=anthropic,openai-embeddings (Claude chat + OpenAI embeddings,
-#                                                          since Anthropic has no embedding API)
-# text-embedding-3-small is 1536-dim, vs nomic-embed-text's 768 — the vector store
-# dimension MUST match whatever produced the vectors, so pgvector needs a fresh
-# schema/re-ingest when switching (initialize-schema handles a clean database;
-# switching an EXISTING populated store requires dropping vector_store first).
 spring:
   config:
     activate:

@@ -79,7 +79,7 @@ public class SemanticCache {
                 best = e;
             }
         }
-        if (best != null && bestSim >= THRESHOLD) {
+        if (best != null && bestSim >= similarityThreshold) {
 
             log.info("cache.hit tenant={} sim={} matchedLength={}", tenantId,
                     String.format("%.3f", bestSim), best.question().length());

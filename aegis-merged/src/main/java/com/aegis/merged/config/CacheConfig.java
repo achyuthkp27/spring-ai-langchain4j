@@ -17,19 +17,21 @@ public class CacheConfig {
     @ConditionalOnProperty(prefix = "spring.ai.model", name = "embedding",havingValue = "ollama", matchIfMissing = true)
     SemanticCache ollamaSemanticCache(
             @Value("${spring.ai.ollama.base-url:http://localhost:11434}") String baseUrl,
-            @Value("${aegis.cache.embedding-model:all-minilm}") String cacheModel) {
+            @Value("${aegis.cache.embedding-model:all-minilm}") String cacheModel,
+            @Value("${aegis.cache.similarity-threshold:0.62}") double similarityThreshold) {
 
         OllamaApi api = OllamaApi.builder().baseUrl(baseUrl).build();
         OllamaEmbeddingModel cacheEmbedding = OllamaEmbeddingModel.builder()
                 .ollamaApi(api)
                 .defaultOptions(OllamaEmbeddingOptions.builder().model(cacheModel).build())
                 .build();
-        return new SemanticCache(cacheEmbedding);
+        return new SemanticCache(cacheEmbedding, similarityThreshold);
     }
 
     @Bean
     @ConditionalOnProperty(prefix = "spring.ai.model", name = "embedding", havingValue = "openai")
-    SemanticCache cloudSemanticCache(EmbeddingModel primaryEmbeddingModel) {
-        return new SemanticCache(primaryEmbeddingModel);
+    SemanticCache cloudSemanticCache(EmbeddingModel primaryEmbeddingModel,
+            @Value("${aegis.cache.similarity-threshold:0.62}") double similarityThreshold) {
+        return new SemanticCache(primaryEmbeddingModel, similarityThreshold);
     }
 }

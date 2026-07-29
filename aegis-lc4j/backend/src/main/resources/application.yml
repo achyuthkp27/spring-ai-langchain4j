@@ -11,17 +11,17 @@ spring:
     password: aegis
   sql:
     init:
-      mode: always            # creates lc4j_chat_memory (see schema.sql), idempotent
+      mode: always
 
 aegis:
   ollama:
     base-url: http://localhost:11434
     chat-model: qwen3.5:4b
-    embedding-model: nomic-embed-text     # 768-dim, retrieval
-    cache-embedding-model: all-minilm     # 384-dim, symmetric sentence similarity
+    embedding-model: nomic-embed-text
+    cache-embedding-model: all-minilm
     temperature: 0.2
     num-predict: 512
-    think: false              # qwen3.5 thinking mode off: reasoning would eat latency/tokens
+    think: false
   jwt:
     secret: change-me-in-prod-this-is-a-dev-only-256bit-secret!!
     ttl-seconds: 3600

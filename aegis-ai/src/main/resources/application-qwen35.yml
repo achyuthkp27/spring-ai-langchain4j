@@ -1,16 +1,4 @@
-# Qwen3.5-9B profile — config-only switch, mirrors how the openai/anthropic
-# profiles work. Activate with: --spring.profiles.active=qwen35
-# The default (no-profile) setup keeps qwen2.5:7b and is untouched.
-#
-# Benchmarks (2026-07-07, 30-case tool-calling suite, this machine):
 #   qwen2.5:7b          83.3% tool accuracy, 48.6 tok/s
-#   qwen3.5-9b-banking  96.7% tool accuracy, 25.4 tok/s
-#
-# qwen3.5 is a THINKING model; aegis.llm.think=false (Spring AI 1.1 ThinkOption)
-# disables reasoning — same measured accuracy (96.7% tools, 13/13 golden facts),
-# a fraction of the latency. The ScopeGate classifier runs on the SAME model
-# (think:false makes its 4-token verdict work): with 24 GB unified memory a second
-# 7B classifier model caused Ollama to evict/reload models on every turn.
 spring:
   config:
     activate:
