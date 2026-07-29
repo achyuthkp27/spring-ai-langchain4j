@@ -120,13 +120,14 @@ export function ChatShell() {
         ? lastMessage.text
         : "";
 
-  const composer = (
+  const composer = (variant: "hero" | "docked") => (
     <Composer
       onSend={handleSend}
       onNewChat={create}
       onStop={stop}
       disabled={busy}
       inputRef={composerRef}
+      variant={variant}
     />
   );
 
@@ -221,7 +222,7 @@ export function ChatShell() {
                 </span>
               </div>
 
-              {composer}
+              {composer("hero")}
 
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 {CAPABILITIES.map((c, i) => (
@@ -288,7 +289,7 @@ export function ChatShell() {
 
             <footer className="shrink-0 px-4 pb-4 pt-1">
               <div className="mx-auto max-w-2xl">
-                {composer}
+                {composer("docked")}
                 <p className="mt-2 text-center text-micro text-muted/70">
                   Achu FinBot never moves money without your confirmation and staff approval.
                 </p>

@@ -59,7 +59,7 @@ function CardFace({ card, index, total }: { card: CardData; index: number; total
         aria-hidden
       />
 
-      <p className="mt-4 font-mono text-[15px] tracking-[0.16em] text-white/95">
+      <p className="mt-4 whitespace-nowrap font-mono text-[13px] tracking-[0.09em] text-white/95">
         •••• •••• •••• {card.last4}
       </p>
 
