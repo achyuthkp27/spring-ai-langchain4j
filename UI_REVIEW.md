@@ -57,113 +57,93 @@ carousel has roles + 44px targets.
 its tab reads "Admin · Achu FinBot" instead of the customer-facing title, `EventsTable` scrolls
 horizontally, and its status pills use the `-ink` tier.
 
-**Delete safety** (`hooks/useConversations.ts`, working tree) — `remove` now awaits the DELETE and
-**rolls back the optimistic removal** on failure with an alert, instead of the previous
-fire-and-forget that dropped the row whether or not the server accepted it.
+**Delete safety** (`hooks/useConversations.ts`) — `remove` awaits the DELETE and **rolls back the
+optimistic removal** on failure with an alert, instead of the previous fire-and-forget that dropped
+the row whether or not the server accepted it.
 
 ---
 
-## 2. Open — P0 (stream lifecycle & data fetching, not visual)
+## 2. The stream-lifecycle pass — delivered
 
-These are logic bugs, independent of the redesign, and are the highest-impact work remaining.
+The P0/P1 logic cluster from the prior version of this review is now fixed, verified by `tsc`,
+`eslint`, `vitest` (12/12), and a `next build`. New Vitest cases cover the two load-bearing
+invariants.
 
-### 2.1 Switching conversations mid-stream corrupts the new conversation's state
-`hooks/useChatStream.ts`
+**Conversation-switch no longer corrupts state (was §2.1)** `useChatStream` keeps an `activeIdRef`
+updated every render; `send` captures its `conversationId` and every callback — `patchBot`, the
+status setter, and the busy/`settle` setter — early-returns unless still current. A new `send`
+aborts the previous controller, and a `useEffect` cleanup aborts the in-flight stream on
+conversation change/unmount. A's late `meta`/`error`/`abort` can no longer flip `busy` or wipe
+`statuses` on conversation B.
 
-`useChatStream` is one instance for the life of `ChatShell`; `activeId` is an argument, not a
-remount trigger. Send in conversation A, click B before A finishes: A's `AbortController` is
-orphaned (only `abortRef.current` is stoppable, and it's been overwritten), so A's stream runs on
-uncancelled. A's `patchBot` calls become no-ops (its `botId` is gone), but A's late
-`onMeta`/`onError`/`onAbort` all call `setState` **without a `botId` guard**, flipping `busy` to
-false and clearing `statuses` on conversation B mid-stream.
-**Fix:** key the stream state (or at least `abortRef` + `botId` + a `currentConvIdRef`) to
-`conversationId`; abort the previous controller on change; guard the status/busy setters with
-`if (convIdAtSend !== currentConvIdRef.current) return;`.
+**`loadHistory` staleness (was §2.2)** A monotonic `historyReqRef` tags each fetch; only the newest
+applies, and it double-checks `activeIdRef` before `setState`. A slow `"default"` fetch can't
+overwrite a real conversation, and rapid sidebar clicks resolve last-issued-wins.
 
-### 2.2 `loadHistory` has no staleness guard and always double-fetches
-`hooks/useChatStream.ts`, `hooks/useConversations.ts`
+**No more stranded `streaming: true` (was §2.3)** `streamChat` now guarantees **exactly one terminal
+callback** — `onMeta` (success), `onAbort` (cancelled), or `onError` (anything else). `dispatch` is
+an exhaustive `switch` that ignores unknown event names, and if the body closes without a `meta`
+frame the turn ends in `onError({ kind: "stream" })`. Covered by a test that sends a token then
+closes and asserts `onError`.
 
-`activeId` initialises to `"default"` and only resolves after `getProfile()` → the token mint. So
-every load fires `fetchHistory("default")`, then `fetchHistory(realId)`, last-to-resolve wins. A
-slow `"default"` fetch can overwrite the real conversation. Same race on rapid sidebar clicks.
-**Fix:** capture the requested `conversationId`, compare against a ref before applying `setState`;
-gate the initial `loadHistory` on `identityKey` being non-null.
+**Per-status failure copy + 401 re-auth (was §2.4)** `onError` receives a structured `StreamError`
+(`kind` + `status`); `errorCopy` maps 401/403/429/5xx and the cut-short case to distinct messages.
+`streamChat` takes a `reauth` callback and retries once on a 401 with a fresh token (tested). The
+stream path no longer bypasses re-mint.
 
-### 2.3 An unknown SSE event name strands the bubble in `streaming: true` forever
-`lib/sse.ts`
+**Stopped/errored answers are marked (was §3.1)** `Message.interrupted` (`"stopped"` | `"error"`);
+`MessageBubble` renders "You stopped this response" or "Response interrupted — it may be
+incomplete." A cut-off answer can no longer read as a confident, complete one.
 
-`dispatch` is an `if/else-if` chain with no `else`. Only `onMeta` (or a terminal error) clears
-`streaming`. Any future/typo'd event name with valid JSON is parsed and dropped, and if the
-backend ever signals a problem via a non-`meta` event the typing indicator never stops.
-**Fix:** make `dispatch` exhaustive; standardise on the stream always terminating with `meta` or an
-explicit `error` event, and add that `error` branch.
+**One shared auth client (was §3.2)** `lib/authClient.ts` — both the customer app (`api.ts`) and
+the admin dashboard (`adminApi.ts`) route through it, so admin gained the real-`exp` decode and the
+401-retry it was missing; the 15s poll now recovers from an expired token instead of failing
+forever.
 
-### 2.4 Every backend failure renders the same generic string
-`lib/sse.ts`, `hooks/useChatStream.ts`
+**Error/loading boundaries + `maxDuration` (was §3.3)** Added `app/error.tsx`, `global-error.tsx`
+(self-contained, renders its own `<html>`), and `app/loading.tsx` (branded). The proxy route
+exports `maxDuration = 60` and `dynamic = "force-dynamic"`, so a long stream isn't cut at the
+platform's default function timeout.
 
-`streamChat` collapses any non-OK into `onError`, which ignores `err` and always shows "Something
-went wrong reaching the assistant." 401 (expired token — and `streamChat` bypasses `authFetch`'s
-re-mint, so it fails forever), 403, 429/blocked, 502, 503 are indistinguishable.
-**Fix:** thread the status through; 401 → re-mint once and retry; 403/blocked, 502/503 → distinct
-copy with the right affordance.
+**Also confirmed already-fixed upstream:** the two proxy items from earlier (30s `AbortSignal`
+truncating SSE; the failover retry replaying a consumed `req.body`) were closed in commit
+`c5f49a8` — streaming requests skip the timeout and the body is buffered once, both with tests in
+`route.test.ts`.
 
 ---
 
-## 3. Open — P1
+## 3. Open — deliberate / lower priority
 
-### 3.1 A stopped or errored answer looks identical to a complete one
-`hooks/useChatStream.ts`, `components/chat/MessageBubble.tsx`
-
-`onAbort` sets `streaming: false` and nothing else; `onError` keeps partial text verbatim
-(`m.text || "…"`). A dispute-deadline explanation cut off mid-sentence renders as a confident,
-finished answer. For a banking assistant that's a trust problem, not cosmetics. The `MessageBubble`
-source-badge slot already exists — reuse it for a `stopped`/`truncated` affix.
-
-### 3.2 `adminApi.ts` reinvents `api.ts`'s token logic and lost the 401 retry
-Estimates `exp` as `Date.now() + 55min` instead of decoding the JWT claim, and `adminGet` has no
-401 handling — once the token goes bad the 15s poll fails forever behind a generic banner.
-**Fix:** collapse both onto one shared `authFetch` (parameterised by cache key + mint body).
-
-### 3.3 No error/loading boundaries; proxy has no `maxDuration`
-`app/` has no `error.tsx`, `global-error.tsx`, or `loading.tsx` — a client throw in production is
-Next's blank "Application error" page. `app/api/[...path]/route.ts` exports no `maxDuration`, so on
-a Vercel deploy the SSE proxy is capped at the platform default (10–15s), which truncates streams
-*before* the in-code 30s `AbortSignal` fires.
-
-### 3.4 The App Router shell is one client island
-`/` is ~227 kB First Load JS, marked static but rendering an empty div because `ChatShell` is
+### 3.1 The App Router shell is one client island
+`/` is ~230 kB First Load JS, marked static but rendering an empty div because `ChatShell` is
 `"use client"` all the way down. The client-side JWT mint genuinely blocks server-rendering the
-chat, but the static shell (header, suggestion markup, admin headings) needn't be client JS.
-`/admin` uses a hardcoded identity and *could* fetch server-side on first load.
+chat, but the static shell (header, capability-card markup, admin headings) needn't be client JS,
+and `/admin` uses a hardcoded identity and *could* fetch server-side on first load. Real work, low
+urgency now that `loading.tsx` covers the first-paint gap.
 
----
+### 3.2 Tokens in `sessionStorage`
+`lib/authClient.ts` still holds the JWT in `sessionStorage` — readable by any XSS, the one frontend
+item with real security weight. A banking product wants an `httpOnly`, `SameSite=Strict` cookie
+with CSRF re-enabled server-side. `next.config.ts` is also empty — no CSP/security headers, which
+compounds it. The right move if this moves past demo status; a design change, not a bug.
 
-## 4. Carried forward — deliberate / lower priority
+### 3.3 `lib/sse.ts` does no runtime schema validation
+`JSON.parse` then `as` cast. Low risk (the backend is the only producer); a `zod` boundary parse
+would be cheap insurance. Same gap on the history-rehydration path in `hydrateAssistantMessage`.
 
-- **Tokens in `sessionStorage`** (`lib/api.ts`) — readable by any XSS; the one frontend item with
-  real security weight. A banking product wants an `httpOnly`, `SameSite=Strict` cookie with CSRF
-  re-enabled server-side. `next.config.ts` is also empty — no CSP/security headers, which compounds
-  this.
-- **`lib/sse.ts` does no runtime schema validation** — `JSON.parse` then `as` cast. Low risk (the
-  backend is the only producer); a `zod` boundary parse would be cheap insurance. Same gap on the
-  history-rehydration path in `hydrateAssistantMessage`.
-- **The two proxy items from CODE_REVIEW** (30s `AbortSignal` truncating SSE; the failover retry
-  replaying an already-consumed `req.body`) remain — see §3.3 for the related `maxDuration` gap.
-- **`public/`** still holds the Next.js starter SVGs and the default favicon.
+### 3.4 `public/` still holds the Next.js starter SVGs and the default favicon. Trivial cleanup.
 
 *Verified correct, don't break:* `MessageBubble` uses `ReactMarkdown` + `remarkGfm` with **no**
 `rehype-raw` — HTML escaped, `javascript:` URLs sanitised. The blocking inline theme script in
-`layout.tsx` sets the class before paint with `suppressHydrationWarning`, and the theme toggle now
+`layout.tsx` sets the class before paint with `suppressHydrationWarning`, and the theme toggle
 renders both icons via the `dark:` variant, so there's no hydration mismatch and no flash.
 
 ---
 
-## 5. Recommended next
+## 4. Recommended next
 
-1. **§2.1–2.4 as one "stream lifecycle" pass** — same subsystem (`useChatStream` + `sse.ts`);
-   fixing them separately means touching the hook four times. Highest user impact.
-2. **§3.1** — the stopped/errored-answer affix. Small, and it's a trust issue.
-3. **§3.3** — add `error.tsx` + `loading.tsx`, and `export const maxDuration` on the proxy route.
-4. **§3.2** — collapse the two token caches.
-5. **§4** — the `sessionStorage`→cookie migration + a CSP in `next.config.ts`, if this moves past
-   demo status.
+The high-impact logic work is done. What's left is deliberate:
+1. **§3.2** — `sessionStorage` → `httpOnly` cookie + a CSP in `next.config.ts`, if this moves past
+   demo status. The one item with real security weight.
+2. **§3.1** — the RSC split, if first-paint JS cost becomes a concern.
+3. **§3.3 / §3.4** — a `zod` boundary parse and the `public/` cleanup, both cheap.
