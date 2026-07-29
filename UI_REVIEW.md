@@ -140,6 +140,17 @@ rows. Covered by the existing SSE tests (13/13).
 `favicon.ico`; added `app/icon.svg` — the brand mark on the near-black tile, so the browser tab is
 no longer a template tell.
 
+**CSRF defense-in-depth (was §4.0, surfaced by the in-depth audit)** The cookie migration made the
+session cookie ambient, so CSRF against the proxy became possible in principle — previously
+impossible, since the token in `sessionStorage` was not an ambient credential. `SameSite=Strict` is
+the primary defense; on top of it, `backendProxy.isCrossSite` now rejects any **cross-site,
+state-changing** request (`POST`/`PUT`/`DELETE`/`PATCH`) with a 403 before the bearer is injected —
+in both the proxy `handle()` and the auth route (which also blocks login-CSRF / forced sessions). It
+keys off the browser-set, unforgeable `Sec-Fetch-Site` header, falling back to an Origin-vs-Host
+comparison (proxy-robust), and never blocks when no signal is present (same-origin GET, non-browser
+client). Two tests assert cross-site → 403 and same-origin → pass; verified live both ways. The
+backend's `csrf().disable()` remains correct — it only ever sees proxy-injected bearers.
+
 ---
 
 ## 4. Open — deliberate judgment call
@@ -168,6 +179,6 @@ renders both icons via the `dark:` variant, so there's no hydration mismatch and
 
 ## 5. Status
 
-Every actionable item from the reviews is closed. Remaining: §4.1 (RSC split, deferred by
-judgment) and §4.2 (a toolchain note, not a code change). `tsc`, `eslint`, `vitest` (13/13), and
+No actionable items open. §4.1 (RSC split) is deferred by judgment and §4.2 is a toolchain note.
+`tsc`, `eslint`, `vitest` (15/15), and
 `next build` all green.

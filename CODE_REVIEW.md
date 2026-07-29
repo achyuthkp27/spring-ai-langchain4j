@@ -144,5 +144,13 @@ step-up gap) are already present in the `BankingTools` class Javadoc.
 
 ## 5. Status
 
-Every actionable item is closed. The list in §3 is deliberate, documented trade-offs, not open
-work; §2 is now documented behaviour, not defects. `mvn -o test` green.
+Every actionable **backend** item is closed. The list in §3 is deliberate, documented trade-offs,
+not open work; §2 is now documented behaviour, not defects. `mvn -o test` green (133 tests).
+
+A full in-depth audit of the current tree found the backend clean on the mechanical risks: all SQL
+is parameterized (the only `+` in a JDBC call is the constant `pg_advisory_xact_lock` key), no
+hardcoded secrets, no `Runtime.exec`/reflection, tenant isolation enforced at every surface, and
+streamed output redacted + tool-call-stripped before emission. The one cross-cutting finding from
+that pass is a **frontend/proxy** item — CSRF defense resting solely on `SameSite=Strict` after the
+cookie migration — tracked in **[UI_REVIEW.md §4.0](./UI_REVIEW.md)**, not here, since the fix is an
+`Origin` check in the Next proxy and the backend's `csrf().disable()` remains correct.
