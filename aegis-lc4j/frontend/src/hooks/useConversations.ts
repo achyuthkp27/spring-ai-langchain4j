@@ -69,11 +69,18 @@ export function useConversations(identityKey: string | null) {
   );
 
   const remove = useCallback(
-    (convId: string) => {
-      const list = load(identityKey).filter((c) => c.id !== convId);
+    async (convId: string) => {
+      const previousList = load(identityKey);
+      const list = previousList.filter((c) => c.id !== convId);
       persist(list);
       if (activeId === convId) setActiveId(list[0]?.id ?? "default");
-      void deleteConversation(convId).catch(() => {});
+      try {
+        await deleteConversation(convId);
+      } catch {
+        persist(previousList);
+        if (activeId === convId) setActiveId(convId);
+        window.alert("Couldn't delete that conversation from the server — it's been restored.");
+      }
     },
     [activeId, identityKey, persist],
   );

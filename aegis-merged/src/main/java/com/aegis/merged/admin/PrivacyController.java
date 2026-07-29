@@ -31,6 +31,12 @@ public class PrivacyController {
 
     @PostMapping("/erase")
     public Map<String, Object> erase(@RequestParam String tenantId, @RequestParam String userId) {
+        if (tenantId == null || tenantId.isBlank()) {
+            throw new IllegalArgumentException("tenantId must not be blank.");
+        }
+        if (userId == null || userId.isBlank()) {
+            throw new IllegalArgumentException("userId must not be blank.");
+        }
 
         CurrentUser.requireTenantAccess(tenantId);
         String conversationPrefix = tenantId + ":" + userId + ":";
