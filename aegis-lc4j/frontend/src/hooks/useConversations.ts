@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { deleteConversation } from "@/lib/api";
 
 export interface Conversation {
   id: string;
@@ -8,30 +9,36 @@ export interface Conversation {
   createdAt: number;
 }
 
-const KEY = "aegis.conversations";
+function storageKey(identityKey: string | null): string {
+  return `aegis.conversations.${identityKey ?? "unknown"}`;
+}
 
-function load(): Conversation[] {
+function load(identityKey: string | null): Conversation[] {
   try {
-    return JSON.parse(localStorage.getItem(KEY) ?? "[]") as Conversation[];
+    return JSON.parse(localStorage.getItem(storageKey(identityKey)) ?? "[]") as Conversation[];
   } catch {
     return [];
   }
 }
 
-export function useConversations() {
+export function useConversations(identityKey: string | null) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string>("default");
 
   useEffect(() => {
-    const list = load();
+    if (!identityKey) return;
+    const list = load(identityKey);
     setConversations(list);
     if (list.length) setActiveId(list[0].id);
-  }, []);
+  }, [identityKey]);
 
-  const persist = (list: Conversation[]) => {
-    setConversations(list);
-    localStorage.setItem(KEY, JSON.stringify(list));
-  };
+  const persist = useCallback(
+    (list: Conversation[]) => {
+      setConversations(list);
+      if (identityKey) localStorage.setItem(storageKey(identityKey), JSON.stringify(list));
+    },
+    [identityKey],
+  );
 
   const create = useCallback(() => {
     const conv: Conversation = {
@@ -39,33 +46,36 @@ export function useConversations() {
       title: "New chat",
       createdAt: Date.now(),
     };
-    persist([conv, ...load()]);
+    persist([conv, ...load(identityKey)]);
     setActiveId(conv.id);
     return conv.id;
-  }, []);
+  }, [identityKey, persist]);
 
-  /** First user message becomes the sidebar title. */
-  const titleFrom = useCallback((convId: string, text: string) => {
-    const list = load();
-    const idx = list.findIndex((c) => c.id === convId);
-    const title = text.length > 34 ? text.slice(0, 34) + "…" : text;
-    if (idx >= 0) {
-      if (list[idx].title === "New chat") {
-        list[idx] = { ...list[idx], title };
-        persist(list);
+  const titleFrom = useCallback(
+    (convId: string, text: string) => {
+      const list = load(identityKey);
+      const idx = list.findIndex((c) => c.id === convId);
+      const title = text.length > 34 ? text.slice(0, 34) + "…" : text;
+      if (idx >= 0) {
+        if (list[idx].title === "New chat") {
+          list[idx] = { ...list[idx], title };
+          persist(list);
+        }
+      } else {
+        persist([{ id: convId, title, createdAt: Date.now() }, ...list]);
       }
-    } else {
-      persist([{ id: convId, title, createdAt: Date.now() }, ...list]);
-    }
-  }, []);
+    },
+    [identityKey, persist],
+  );
 
   const remove = useCallback(
     (convId: string) => {
-      const list = load().filter((c) => c.id !== convId);
+      const list = load(identityKey).filter((c) => c.id !== convId);
       persist(list);
       if (activeId === convId) setActiveId(list[0]?.id ?? "default");
+      void deleteConversation(convId).catch(() => {});
     },
-    [activeId],
+    [activeId, identityKey, persist],
   );
 
   return { conversations, activeId, setActiveId, create, titleFrom, remove };

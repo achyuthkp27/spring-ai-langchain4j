@@ -25,13 +25,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
-/**
- * Admin analytics API — everything a chatbot operator needs in one place:
- * traffic and outcomes, latency percentiles, token spend per tenant/model,
- * guardrail activity, tool usage, conversation transcripts, RAG corpus state,
- * budget and circuit status. Secured: /api/admin/** requires the admin role
- * (see SecurityConfig).
- */
 @RestController
 @RequestMapping("/api/admin")
 public class AdminController {
@@ -60,12 +53,6 @@ public class AdminController {
         this.chatModel = chatModel;
     }
 
-    /** hasAuthority("PERM_admin:all") (SecurityConfig) only proves "an admin of SOME bank" —
-        without a per-endpoint check every handler below would let an achu-bank admin read
-        globex-bank's conversations, audit rows, and AML flags. Null return means "no tenant
-        filter", which is reachable ONLY by a platform:admin explicitly omitting the tenant
-        param — every other caller with a blank param gets scoped to their own tenant, and a
-        non-blank param that isn't their own tenant (and they're not platform:admin) is denied. */
     private static String resolveTenantFilter(String requested) {
         Principal p = CurrentUser.get();
         if (requested == null || requested.isBlank()) {
@@ -77,8 +64,6 @@ public class AdminController {
         return requested;
     }
 
-    /** Conversation ids are "tenant:user:conversationId" (see AssistantController) — a
-        platform:admin may read any conversation, everyone else only their own tenant's. */
     private static void requireOwnConversation(String conversationId) {
         Principal p = CurrentUser.get();
         if (p.can("platform:admin")) return;
@@ -87,7 +72,6 @@ public class AdminController {
         }
     }
 
-    /** Headline tiles + per-tenant/per-model spend + guardrail state, in one call. */
     @GetMapping("/overview")
     public Map<String, Object> overview() {
         Map<String, Long> sources = audit.countsBySource();
@@ -97,7 +81,6 @@ public class AdminController {
         long blocked = sources.entrySet().stream()
                 .filter(e -> e.getKey().startsWith("blocked")).mapToLong(Map.Entry::getValue).sum();
 
-        // Real token counts (from model usage metadata) per tenant+model via Micrometer.
         List<Map<String, Object>> spend = new ArrayList<>();
         meters.find("aegis.ai.tokens.total").counters().forEach(c -> spend.add(Map.of(
                 "tenant", String.valueOf(c.getId().getTag("tenant")),
@@ -126,21 +109,16 @@ public class AdminController {
         return out;
     }
 
-    /** Recent audit events (question previews are PII-redacted before storage). */
     @GetMapping("/events")
     public List<AuditTrail.Event> events(@RequestParam(defaultValue = "100") int limit) {
         return audit.recent(Math.min(limit, AuditTrail.MAX_EVENTS));
     }
 
-    /** Per-minute traffic buckets for the dashboard chart. */
     @GetMapping("/timeseries")
     public List<Map<String, Object>> timeseries(@RequestParam(defaultValue = "60") int minutes) {
         return audit.timeseries(Math.min(Math.max(minutes, 5), 24 * 60));
     }
 
-    /** Conversations from the JDBC chat memory, most recently active first. Defaults to the
-        caller's own tenant; only a platform:admin may pass a different one (or omit it for
-        every tenant — see resolveTenantFilter). */
     @GetMapping("/conversations")
     public List<Map<String, Object>> conversations(@RequestParam(defaultValue = "50") int limit,
                                                     @RequestParam(required = false) String tenant) {
@@ -153,7 +131,7 @@ public class AdminController {
                 GROUP BY conversation_id
                 ORDER BY last_at DESC LIMIT ?""",
                 (rs, i) -> {
-                    // memory keys are tenant:user:conversationId (see AssistantController)
+                    
                     String id = rs.getString("conversation_id");
                     String[] parts = id.split(":", 3);
                     Map<String, Object> m = new LinkedHashMap<>();
@@ -167,7 +145,6 @@ public class AdminController {
                 }, tenantFilter, tenantFilter == null ? null : tenantFilter + ":%", cappedLimit);
     }
 
-    /** Full transcript of one conversation (admin visibility into what the bot said). */
     @GetMapping("/conversations/{id}/messages")
     public List<Map<String, Object>> transcript(@PathVariable String id) {
         requireOwnConversation(id);
@@ -183,8 +160,6 @@ public class AdminController {
                 }, id);
     }
 
-    /** RAG corpus state: how many chunks each tenant has in the vector store. Defaults to the
-        caller's own tenant; see resolveTenantFilter. */
     @GetMapping("/rag")
     public List<Map<String, Object>> rag(@RequestParam(required = false) String tenant) {
         String tenantFilter = resolveTenantFilter(tenant);
@@ -203,10 +178,6 @@ public class AdminController {
                 }, tenantFilter, tenantFilter);
     }
 
-    /** Compliance/forensics query over the PERSISTED audit table (survives restarts, unlike
-        the in-memory ring buffer behind /events) — filterable by tenant and date range.
-        Defaults to the caller's own tenant; see resolveTenantFilter. A malformed from/to now
-        reaches ApiExceptionHandler as a 400 instead of an unhandled 500. */
     @GetMapping("/audit/query")
     public List<Map<String, Object>> auditQuery(
             @RequestParam(required = false) String tenant,
@@ -240,25 +211,16 @@ public class AdminController {
                 Timestamp.from(fromAt), Timestamp.from(toAt), tenantFilter, tenantFilter, cappedLimit);
     }
 
-    /** Recomputes the audit log's hash chain and reports whether it's intact — proof the
-        persisted audit history hasn't been edited since it was written (see
-        AuditTrail.verifyChain for the mechanism; this is code-level tamper-evidence, not a
-        substitute for real WORM storage). */
     @GetMapping("/audit/verify")
     public AuditTrail.ChainVerification verifyAuditChain() {
         return audit.verifyChain();
     }
 
-    /** Rule-based transaction-monitoring flags for a tenant (Phase 2 AML scaffolding — see
-        AmlMonitor for exactly what this is and isn't). */
     @GetMapping("/aml/flags")
     public List<AmlMonitor.Flag> amlFlags(@RequestParam String tenant) {
         return aml.scanTenant(CurrentUser.requireTenantAccess(tenant));
     }
 
-    /** Invalidate the semantic cache (e.g. after a policy change). Clearing EVERY tenant's
-        cache is a platform:admin-only action (see resolveTenantFilter) — an ordinary bank
-        admin omitting the param now clears only their own tenant, not the whole platform's. */
     @PostMapping("/cache/clear")
     public Map<String, Object> clearCache(@RequestParam(required = false) String tenant) {
         String tenantFilter = resolveTenantFilter(tenant);

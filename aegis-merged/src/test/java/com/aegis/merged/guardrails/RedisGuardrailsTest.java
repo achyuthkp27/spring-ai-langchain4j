@@ -18,15 +18,6 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/**
- * Exercises the Redis-backed path of {@link RateLimiter}/{@link BudgetGuard} (the in-memory
- * fallback is already covered by {@link RateLimiterTest}/{@link GuardrailsOwaspTest}) against
- * a real Redis via Testcontainers — the Lua scripts and atomic INCRBY/EXPIRE logic can't be
- * verified against a mock without re-implementing Redis semantics in the mock itself.
- *
- * <p>Gated behind RUN_CONTAINER_TESTS=true, same as {@code AegisMergedApplicationTests}, so a
- * plain local {@code mvn test} stays green without Docker.
- */
 @Testcontainers
 @EnabledIfEnvironmentVariable(named = "RUN_CONTAINER_TESTS", matches = "true")
 class RedisGuardrailsTest {
@@ -52,16 +43,19 @@ class RedisGuardrailsTest {
     }
 
     @Test
-    @DisplayName("Redis-backed RateLimiter enforces the same burst cap as the in-memory bucket")
+    @DisplayName("Redis-backed RateLimiter enforces the same per-user burst cap as the in-memory bucket")
     void redisRateLimiterEnforcesBurst() {
         var limiter = new RateLimiter(Optional.of(template));
         String tenant = "redis-burst-" + UUID.randomUUID();
+        String user = "redis-user-" + UUID.randomUUID();
         int allowed = 0;
         for (int i = 0; i < 100; i++) {
-            if (limiter.allow(tenant)) allowed++;
+            if (limiter.allow(tenant, user)) allowed++;
         }
         assertThat(allowed).isLessThanOrEqualTo(25);
-        assertThat(limiter.allow("other-tenant-" + UUID.randomUUID())).isTrue();
+        assertThat(limiter.allow("other-tenant-" + UUID.randomUUID(), "other-user")).isTrue();
+
+        assertThat(limiter.allow(tenant, "a-different-user-" + UUID.randomUUID())).isTrue();
     }
 
     @Test

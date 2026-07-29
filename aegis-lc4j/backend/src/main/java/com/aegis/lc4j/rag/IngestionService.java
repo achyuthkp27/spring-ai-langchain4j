@@ -17,14 +17,6 @@ import org.springframework.stereotype.Service;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
-/**
- * Ingestion: reads per-tenant Markdown policy docs from classpath:documents/{tenant}/*.md,
- * splits into ~400-token chunks, stamps each with tenantId + docType metadata, and
- * writes to pgvector.
- *
- * <p>The tenantId metadata is the load-bearing security control: retrieval filters on
- * it server-side so a tenant can never retrieve another tenant's documents.
- */
 @Service
 public class IngestionService {
 
@@ -41,13 +33,10 @@ public class IngestionService {
         this.semanticCache = semanticCache;
     }
 
-    /** Ingests classpath:documents/{tenant}/*.md, tagging every chunk with its tenant. */
     public int ingestAll() {
-        // Policy docs are changing → invalidate the semantic cache so no stale
-        // answer can be served after an update.
+
         semanticCache.clear();
-        // Idempotent: drop previously-ingested chunks so re-running doesn't create
-        // duplicates that skew retrieval ranking.
+
         try {
             store.removeAll(MetadataFilterBuilder.metadataKey("tenantId").isNotEqualTo("__none__"));
             log.info("ingest cleared existing chunks");
@@ -56,7 +45,7 @@ public class IngestionService {
         }
 
         var ingestor = EmbeddingStoreIngestor.builder()
-                .documentSplitter(DocumentSplitters.recursive(1600, 200))   // ~400 tokens, ~50 overlap
+                .documentSplitter(DocumentSplitters.recursive(1600, 200))   
                 .embeddingModel(embeddingModel)
                 .embeddingStore(store)
                 .build();

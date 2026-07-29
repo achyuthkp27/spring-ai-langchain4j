@@ -9,7 +9,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
-/** Admin view/set of per-tenant token budgets (authenticated). */
 @RestController
 @RequestMapping("/api/admin/budget")
 public class BudgetAdminController {

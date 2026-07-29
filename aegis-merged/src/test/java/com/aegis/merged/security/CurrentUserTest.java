@@ -10,12 +10,6 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/**
- * Tenant isolation is this system's central claim (see CODE_REVIEW.md P0 #7) and
- * requireTenantAccess is the one shared choke point every admin/cross-tenant endpoint now
- * calls before touching a tenantId it was given — so it's tested directly, not just implied
- * by the endpoints that use it.
- */
 class CurrentUserTest {
 
     @AfterEach

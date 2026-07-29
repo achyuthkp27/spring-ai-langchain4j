@@ -9,18 +9,6 @@ import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
-/**
- * Two-tier model cascade. A request is classified SIMPLE (fast local model) or COMPLEX
- * (escalation model) BEFORE streaming starts, using cheap regex/heuristic signals — never an
- * extra LLM round-trip, which would cost every request the latency it's trying to save for
- * the rare hard ones.
- *
- * True confidence-gated cascading (run the small model, inspect ITS answer, escalate if weak)
- * would require buffering the whole answer before sending anything to the client, killing
- * time-to-first-token. Instead this router escalates the FOLLOWING turn in a conversation once
- * a low-confidence answer is observed — a session-scoped self-correction instead of a
- * per-token one, kept in step with {@link AnswerConfidence}.
- */
 @Component
 public class ModelRouter {
 
@@ -35,7 +23,6 @@ public class ModelRouter {
             + "step-by-step|in depth|pros and cons|walk me through)\\b",
             Pattern.CASE_INSENSITIVE);
 
-    // Same entity-id shape ScopeGate.DOMAIN_FASTPATH uses to recognize banking ids.
     private static final Pattern ENTITY_ID = Pattern.compile(
             "\\b(acc|txn|case|apr|crd)-\\d+\\b", Pattern.CASE_INSENSITIVE);
 
@@ -47,7 +34,8 @@ public class ModelRouter {
 
     private final ConcurrentHashMap<String, Escalation> escalated = new ConcurrentHashMap<>();
 
-    /** Classify a request BEFORE the stream starts. Cheap — no LLM call. */
+    private static final int SWEEP_THRESHOLD = 1_000;
+
     public Tier decide(String message, String memoryKey) {
         Escalation e = escalated.get(memoryKey);
         if (e != null) {
@@ -84,15 +72,11 @@ public class ModelRouter {
         return n;
     }
 
-    /**
-     * Call after a turn completes: a low-confidence answer OR an actual tool failure (a
-     * lookup that came back empty/not-found, per {@link com.aegis.merged.tools.BankingTools#TOOL_FAILED_KEY})
-     * escalates the NEXT turn in this conversation. The tool signal catches failures the
-     * model might phrase confidently, which {@link AnswerConfidence}'s phrase match alone
-     * would miss.
-     */
     public void markLowConfidence(String memoryKey, String answer, boolean toolFailed) {
         if (toolFailed || AnswerConfidence.looksLowConfidence(answer)) {
+            if (escalated.size() >= SWEEP_THRESHOLD) {
+                escalated.values().removeIf(Escalation::expired);
+            }
             escalated.put(memoryKey, new Escalation(Instant.now().plus(ESCALATION_TTL)));
             log.info("router.escalating-next-turn key={} toolFailed={}", memoryKey, toolFailed);
         }

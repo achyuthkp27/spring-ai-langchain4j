@@ -21,27 +21,14 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.LongAdder;
 
-/**
- * Audit trail powering the admin dashboard. Every assistant request is recorded with its
- * OUTCOME (llm / cache / the specific guardrail that blocked it / error), latency and sizing,
- * plus every tool invocation.
- *
- * The dashboard reads (recent/countsBySource/timeseries/latency) stay backed by the in-memory
- * bounded ring buffer below — cheap, interactive, no reason to hit Postgres for those. A
- * SEPARATE, additive write persists every event to {@code assistant_audit_event} so the full
- * audit history survives a restart (compliance/forensics), fired asynchronously so a slow or
- * unavailable DB never adds latency to the streaming response path — failures are logged and
- * swallowed, the in-memory trail remains authoritative for the live dashboard regardless.
- *
- * Privacy: the question preview stored here must ALREADY be PII-redacted by the
- * caller — the admin UI (and the persisted row) render it verbatim.
- */
 @Component
 public class AuditTrail {
 
@@ -50,7 +37,6 @@ public class AuditTrail {
     public static final int MAX_EVENTS = 2000;
     private static final int PREVIEW_CHARS = 140;
 
-    /** One assistant request, as the admin sees it. */
     public record Event(Instant at, String tenant, String user, String conversationId,
                         String source, long elapsedMs, int answerChars, String question) {
     }
@@ -62,19 +48,23 @@ public class AuditTrail {
     private final Instant startedAt = Instant.now();
 
     private final JdbcTemplate jdbc;
-    private final ExecutorService persistExecutor = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "audit-persist");
-        t.setDaemon(true);
-        return t;
-    });
 
-    // Hash-chain tamper-evidence (Phase 2 of the production roadmap): every persisted row
-    // includes a SHA-256 hash of its own fields chained to the PREVIOUS row's hash, so any
-    // edit or deletion of a historical row — including by someone with raw DB access — breaks
-    // the chain at that point, detectable via verifyChain(). This is NOT a substitute for
-    // real WORM/immutable storage (Phase 2's real bar), but it turns "was this audit log
-    // tampered with" from unanswerable into a cheap, mechanical check, entirely in code.
-    // Only ever mutated on persistExecutor's single thread, so no extra locking is needed.
+    private static final int MAX_QUEUED_WRITES = 10_000;
+    private final AtomicLong droppedWrites = new AtomicLong();
+    private final ExecutorService persistExecutor = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
+            new LinkedBlockingQueue<>(MAX_QUEUED_WRITES),
+            r -> {
+                Thread t = new Thread(r, "audit-persist");
+                t.setDaemon(true);
+                return t;
+            },
+            (r, executor) -> {
+                long total = droppedWrites.incrementAndGet();
+                if (total == 1 || total % 1000 == 0) {
+                    log.warn("audit.persist.queue_full dropping write (totalDropped={})", total);
+                }
+            });
+
     private final AtomicReference<String> lastHash = new AtomicReference<>("GENESIS");
 
     public AuditTrail(JdbcTemplate jdbc) {
@@ -99,8 +89,7 @@ public class AuditTrail {
                         row_hash VARCHAR(64) NOT NULL DEFAULT ''
                     )
                     """);
-            // Idempotent for a table that pre-dates this column (ALTER ... IF NOT EXISTS,
-            // supported since Postgres 9.6 for ADD COLUMN).
+
             jdbc.execute("ALTER TABLE assistant_audit_event ADD COLUMN IF NOT EXISTS prev_hash VARCHAR(64) NOT NULL DEFAULT 'GENESIS'");
             jdbc.execute("ALTER TABLE assistant_audit_event ADD COLUMN IF NOT EXISTS row_hash VARCHAR(64) NOT NULL DEFAULT ''");
 
@@ -110,7 +99,7 @@ public class AuditTrail {
                         String.class);
                 if (seeded != null) lastHash.set(seeded);
             } catch (org.springframework.dao.EmptyResultDataAccessException ignored) {
-                // No rows yet — chain starts at GENESIS, already the default.
+                
             }
         } catch (Exception e) {
             log.warn("audit.schema.create skipped: {}", e.getMessage());
@@ -128,7 +117,16 @@ public class AuditTrail {
 
     @PreDestroy
     public void shutdown() {
+
         persistExecutor.shutdown();
+        try {
+            if (!persistExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                persistExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            persistExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 
     public void record(String tenant, String user, String conversationId,
@@ -165,12 +163,6 @@ public class AuditTrail {
         });
     }
 
-    /** Recomputes the hash chain from scratch and reports the first row (if any) where the
-        stored hash doesn't match what its own fields + the previous row's hash produce —
-        proof the persisted audit log hasn't been edited since it was written.
-        {@code legacyRowsSkipped} counts rows with no hash at all — written before this
-        feature existed — which are unverifiable by construction, not evidence of tampering;
-        the chain is only checked from the first row that actually has one. */
     public record ChainVerification(boolean valid, long rowsChecked, long legacyRowsSkipped, Long brokenAtId) {
     }
 
@@ -185,19 +177,18 @@ public class AuditTrail {
                         rs.getInt("answer_chars"), rs.getString("question"),
                         rs.getString("prev_hash"), rs.getString("row_hash")});
 
-        String expectedPrev = null; // set from the first hashed row, not assumed to be GENESIS
+        String expectedPrev = null; 
         long legacyRowsSkipped = 0;
         for (Object[] r : rows) {
             String recordedHash = (String) r[9];
             if (recordedHash == null || recordedHash.isBlank()) {
-                // Row predates the hash-chain feature — unverifiable by construction, not tampering.
+                
                 legacyRowsSkipped++;
                 continue;
             }
             String recordedPrev = (String) r[8];
             if (expectedPrev == null) {
-                // First hashed row: accept whatever prev_hash it recorded (GENESIS, or the last
-                // legacy row's absence of a hash) as the start of the verifiable chain.
+
                 expectedPrev = recordedPrev;
             } else if (!expectedPrev.equals(recordedPrev)) {
                 return new ChainVerification(false, rows.size(), legacyRowsSkipped, (Long) r[0]);
@@ -212,7 +203,6 @@ public class AuditTrail {
         return new ChainVerification(true, rows.size(), legacyRowsSkipped, null);
     }
 
-    /** Called from inside the tools so the dashboard shows which capabilities are used. */
     public void toolCalled(String tool, String tenant) {
         toolCalls.computeIfAbsent(tool + "|" + tenant, k -> new LongAdder()).increment();
     }
@@ -236,7 +226,6 @@ public class AuditTrail {
         return out;
     }
 
-    /** {tool -> {tenant -> count}} for the dashboard's capability breakdown. */
     public Map<String, Map<String, Long>> toolUsage() {
         Map<String, Map<String, Long>> out = new TreeMap<>();
         toolCalls.forEach((key, v) -> {
@@ -247,7 +236,6 @@ public class AuditTrail {
         return out;
     }
 
-    /** Latency stats (ms) over the retained window, per source and overall. */
     public Map<String, Map<String, Long>> latency() {
         Map<String, List<Long>> samples = new TreeMap<>();
         for (Event e : events) {
@@ -268,7 +256,6 @@ public class AuditTrail {
         return out;
     }
 
-    /** Per-minute buckets over the last {@code minutes}, oldest first, for the traffic chart. */
     public List<Map<String, Object>> timeseries(int minutes) {
         Instant cutoff = Instant.now().minus(minutes, ChronoUnit.MINUTES).truncatedTo(ChronoUnit.MINUTES);
         Map<Instant, Map<String, Long>> buckets = new TreeMap<>();

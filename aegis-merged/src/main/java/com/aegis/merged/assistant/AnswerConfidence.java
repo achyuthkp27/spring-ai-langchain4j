@@ -2,12 +2,6 @@ package com.aegis.merged.assistant;
 
 import com.aegis.merged.guardrails.GuardrailAdvisor;
 
-/**
- * Shared low-confidence phrase check. Used by {@link AssistantController} to decide whether an
- * answer is safe to cache, and by {@link ModelRouter} to decide whether the NEXT turn in a
- * conversation should escalate to the bigger model — the same phrases that make an answer
- * unfit to cache also make it a signal that the fast model struggled with this topic.
- */
 final class AnswerConfidence {
 
     private AnswerConfidence() {

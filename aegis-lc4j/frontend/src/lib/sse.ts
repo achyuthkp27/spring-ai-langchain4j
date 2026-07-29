@@ -1,7 +1,4 @@
-/**
- * SSE-over-POST client: fetch + ReadableStream (EventSource can't POST).
- * Parses `event:`/`data:` frames and dispatches typed callbacks.
- */
+
 
 export interface ChatMeta {
   conversationId: string;
@@ -12,8 +9,6 @@ export interface ChatMeta {
   matchedQuestion?: string | null;
 }
 
-// Mirrors BankingService.Card (aegis-merged) — real structured data pushed by the
-// listCards/freezeCard tools, not parsed back out of the model's prose.
 export interface CardData {
   cardId: string;
   accountId: string;
@@ -23,7 +18,6 @@ export interface CardData {
   status: "ACTIVE" | "FROZEN";
 }
 
-// Mirrors BankingService.Account.
 export interface AccountData {
   accountId: string;
   tenantId: string;
@@ -32,7 +26,6 @@ export interface AccountData {
   type: "CHECKING" | "SAVINGS";
 }
 
-// Mirrors BankingService.Transaction.
 export interface TransactionData {
   txnId: string;
   accountId: string;
@@ -42,7 +35,6 @@ export interface TransactionData {
   direction: "DEBIT" | "CREDIT";
 }
 
-// Mirrors BankingService.DisputeCase.
 export interface CaseData {
   caseId: string;
   accountId: string;
@@ -51,8 +43,6 @@ export interface CaseData {
   status: string;
 }
 
-// Mirrors BankingService.Approval — card replacement fee / provisional credit requests.
-// Always PENDING_HUMAN_APPROVAL: the model can request, never execute, money movement.
 export interface ApprovalData {
   approvalId: string;
   subject: string;
@@ -61,13 +51,11 @@ export interface ApprovalData {
   status: string;
 }
 
-// Mirrors BankingTools.Citation — a cited policy passage (source doc + snippet).
 export interface CitationData {
   source: string;
   snippet: string;
 }
 
-// Mirrors BankingService.LedgerEntry — one leg of a double-entry transfer posting.
 export interface LedgerEntryData {
   entryId: string;
   accountId: string;
@@ -78,7 +66,6 @@ export interface LedgerEntryData {
   postedAt: string;
 }
 
-// Mirrors BankingService.CustomerProfile.
 export interface ProfileData {
   tenantId: string;
   userId: string;
@@ -90,7 +77,6 @@ export interface ProfileData {
   travelDestination: string | null;
 }
 
-// Mirrors BankingTools.SpendingSummary.
 export interface StatementData {
   accountId: string;
   byCategory: Record<string, number>;
@@ -112,6 +98,7 @@ export interface StreamHandlers {
   onStatement: (statement: StatementData) => void;
   onMeta: (meta: ChatMeta) => void;
   onError: (err: Error) => void;
+  onAbort?: () => void;
 }
 
 export async function streamChat(
@@ -162,7 +149,7 @@ export async function streamChat(
       else if (event === "statement") handlers.onStatement(payload as StatementData);
       else if (event === "meta") handlers.onMeta(payload as ChatMeta);
     } catch {
-      // skip malformed frame
+      
     }
   };
 
@@ -171,7 +158,7 @@ export async function streamChat(
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
-      // Frames are separated by a blank line.
+      
       let sep: number;
       while ((sep = buffer.indexOf("\n\n")) >= 0) {
         const frame = buffer.slice(0, sep);
@@ -186,7 +173,9 @@ export async function streamChat(
       }
     }
   } catch (e) {
-    if ((e as DOMException)?.name !== "AbortError") {
+    if ((e as DOMException)?.name === "AbortError") {
+      handlers.onAbort?.();
+    } else {
       handlers.onError(e instanceof Error ? e : new Error(String(e)));
     }
   }

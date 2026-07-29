@@ -14,13 +14,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.stream.Collectors;
 
-/**
- * Policy search for the unified assistant. CRUCIAL DIFFERENCE from the MCP
- * PolicyTools: the tenant is taken from the authenticated Principal in ToolContext,
- * NEVER from a model-supplied argument. The model cannot ask for another tenant's
- * documents by putting a different tenantId in a tool call — the security boundary
- * is not the model's to choose.
- */
 @Component
 public class PolicySearchTool {
 
@@ -43,17 +36,15 @@ public class PolicySearchTool {
         if (!(p instanceof Principal principal)) {
             throw new AccessDeniedException("No authenticated principal in tool context");
         }
-        String tenantId = principal.tenantId();   // from identity, not from the model
+        String tenantId = principal.tenantId();   
         audit.toolCalled("searchPolicies", tenantId);
         BankingTools.status(ctx, "Searching policy documents…");
 
-        // Typed filter for defense in depth (tenantId comes from the verified JWT,
-        // but never build filter expressions by string concatenation).
         var filter = new org.springframework.ai.vectorstore.filter.FilterExpressionBuilder()
                 .eq("tenantId", tenantId).build();
         var results = vectorStore.similaritySearch(SearchRequest.builder()
                 .query(query)
-                .topK(6)                      // corpus grew 5x (12 docs / ~48 chunks); 4 was tuned for 3 docs
+                .topK(6)                      
                 .similarityThreshold(0.1)
                 .filterExpression(filter)
                 .build());
@@ -66,8 +57,6 @@ public class PolicySearchTool {
             return "No matching policy passages found.";
         }
 
-        // Dedupe by source (several chunks often come from the same document) so the
-        // citation chip row stays compact — keep the first (highest-ranked) snippet per doc.
         var citations = new java.util.LinkedHashMap<String, BankingTools.Citation>();
         for (var d : results) {
             String source = String.valueOf(d.getMetadata().getOrDefault("source", "?"));

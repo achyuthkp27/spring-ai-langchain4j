@@ -14,7 +14,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
-/** Validates a Bearer JWT and puts the verified Principal into the SecurityContext. */
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
 
@@ -38,7 +37,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 SecurityContextHolder.getContext().setAuthentication(auth);
             } catch (Exception e) {
                 log.warn("jwt.invalid {}", e.getMessage());
-                // leave unauthenticated → Security will 401 protected routes
+                
             }
         }
         chain.doFilter(request, response);

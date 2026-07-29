@@ -9,23 +9,9 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * A second ChatClient dedicated to grounded RAG answers. Kept separate from the
- * conversational copilot so its system prompt can enforce "answer only from
- * context, cite sources, refuse when context is empty".
- *
- * {@code guardrails} was missing here originally (CODE_REVIEW.md P0 #8) — /api/rag/ask and
- * /api/rag/ask-advanced went straight to the model with no rate limit, no budget check, no
- * injection screen, and no PII redaction, unlike AssistantController.stream which enforces all
- * four manually (streaming bypasses CallAdvisor). Both RAG endpoints use ChatClient.call(),
- * a plain CallAdvisor chain, so wiring the SAME GuardrailAdvisor bean here closes that gap
- * with no per-endpoint duplication.
- */
 @Configuration
 public class RagConfig {
 
-    // Principled and short. "Add nothing beyond the context" subsumes the specific
-    // failure modes (e.g. inventing an acronym's meaning) at the right altitude.
     private static final String RAG_SYSTEM_PROMPT = """
             You are Achu FinBot's document-grounded assistant for bank staff.
             Answer only from the provided context and cite the source document for each
@@ -43,7 +29,7 @@ public class RagConfig {
                 .defaultAdvisors(
                         tokenAudit,
                         guardrails,
-                        // Conversation memory so same-tenant follow-ups keep context.
+                        
                         MessageChatMemoryAdvisor.builder(chatMemory).build())
                 .build();
     }

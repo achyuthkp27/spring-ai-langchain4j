@@ -19,14 +19,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
-/**
- * Code-enforced scope boundary: an off-domain message is short-circuited BEFORE
- * the main assistant call, with a canned redirect. The model is used as a cheap
- * temperature-0, 4-token classifier — classifying WITH recent conversation so a
- * follow-up ("the 3rd one", "yes") is judged as a continuation of the in-scope
- * thread. Greetings and obviously-banking messages fast-path with no model call.
- * Fails OPEN: a classifier hiccup must never block legitimate banking questions.
- */
 @Component
 public class ScopeGate {
 
@@ -89,22 +81,17 @@ public class ScopeGate {
         this.memoryStore = memoryStore;
     }
 
-    /**
-     * True if the message belongs to the assistant's domain.
-     * @param memoryKey the chat memory id, so a follow-up is judged in context.
-     */
     public boolean inScope(String message, String memoryKey) {
-        if (message == null || message.isBlank()) return true;   // let the main path handle
+        if (message == null || message.isBlank()) return true;   
         String norm = message.trim().toLowerCase().replaceAll("[.!?]+$", "");
         String canon = norm.replaceAll("\\bu\\b", "you").replaceAll("\\bur\\b", "your")
                            .replaceAll("\\s+", " ");
         if (FASTPATH_IN.contains(norm) || FASTPATH_IN.contains(canon)) return true;
-        if (DOMAIN_FASTPATH.matcher(canon).find()) return true;   // clearly banking — no model call
+        if (DOMAIN_FASTPATH.matcher(canon).find()) return true;   
 
         String context = recentContext(memoryKey);
         boolean standalone = context.isBlank();
 
-        // Verdict cache only for standalone messages (follow-ups depend on context).
         if (standalone) {
             CachedVerdict cached = verdicts.get(norm);
             if (cached != null && !cached.expired()) return cached.inScope();
@@ -120,20 +107,18 @@ public class ScopeGate {
             if (standalone) putVerdict(norm, !out);
             return !out;
         } catch (Exception e) {
-            // Fail OPEN: a classifier hiccup must not block legitimate banking questions.
+            
             log.warn("scope.gate.error fail-open: {}", e.getMessage());
             return true;
         }
     }
 
-    /** The last assistant + user turn from memory, as plain text, to ground a follow-up. */
     private String recentContext(String memoryKey) {
         if (memoryKey == null) return "";
         try {
             List<ChatMessage> messages = memoryStore.getMessages(memoryKey);
             if (messages.isEmpty()) return "";
-            // Walk backwards to the last user + assistant TEXT turns, skipping tool
-            // messages — the raw tail of memory may be tool-execution noise.
+
             String lastUser = null, lastAssistant = null;
             for (int i = messages.size() - 1; i >= 0 && (lastUser == null || lastAssistant == null); i--) {
                 ChatMessage m = messages.get(i);
@@ -149,12 +134,12 @@ public class ScopeGate {
             if (lastAssistant != null) sb.append("Assistant: ").append(lastAssistant).append("\n");
             return sb.toString().trim();
         } catch (Exception e) {
-            return "";   // no context is fine — falls back to standalone classification
+            return "";   
         }
     }
 
     private void putVerdict(String key, boolean inScope) {
-        if (verdicts.size() >= MAX_VERDICTS) verdicts.clear();   // simple bound
+        if (verdicts.size() >= MAX_VERDICTS) verdicts.clear();   
         verdicts.put(key, new CachedVerdict(inScope, Instant.now().plus(VERDICT_TTL)));
     }
 }

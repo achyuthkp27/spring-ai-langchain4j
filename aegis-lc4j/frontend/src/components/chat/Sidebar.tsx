@@ -21,7 +21,6 @@ import { DEMO_IDENTITIES } from "@/hooks/useSession";
 import { displayName } from "@/lib/tenantNames";
 import type { Profile } from "@/lib/api";
 
-/** ChatGPT-style relative-date buckets, computed once per render from createdAt. */
 function groupByDate(conversations: Conversation[]): [string, Conversation[]][] {
   const now = new Date();
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
@@ -85,7 +84,7 @@ export function Sidebar({
       )}
       style={{ background: "linear-gradient(160deg, var(--wash-a), var(--wash-b))" }}
     >
-      {/* Wordmark + collapse toggle */}
+      {}
       <div className="flex items-center justify-between px-1 py-1">
         {!collapsed && (
           <span className="flex items-center gap-1.5 text-[15px] font-bold tracking-tight">
@@ -101,7 +100,7 @@ export function Sidebar({
         </button>
       </div>
 
-      {/* Search pill */}
+      {}
       {!collapsed && (
         <div className="relative">
           <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
@@ -114,7 +113,7 @@ export function Sidebar({
         </div>
       )}
 
-      {/* Primary pill actions */}
+      {}
       <div className="flex flex-col gap-1.5">
         <button
           onClick={onCreate}
@@ -251,9 +250,9 @@ export function Sidebar({
 
   return (
     <>
-      {/* Desktop: static */}
+      {}
       <aside className="hidden md:block h-full">{body}</aside>
-      {/* Mobile: slide-over drawer */}
+      {}
       <AnimatePresence>
         {open && (
           <>

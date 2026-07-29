@@ -15,14 +15,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Phase 1 ingestion (a lightweight stand-in for the full Spring Batch ETL):
- * reads per-tenant Markdown policy docs, splits them into chunks, stamps each
- * chunk with tenantId + docType metadata, and writes to the pgvector store.
- *
- * <p>The tenantId metadata is the load-bearing security control: retrieval later
- * filters on it server-side so a tenant can never retrieve another tenant's docs.
- */
 @Service
 public class IngestionService {
 
@@ -37,13 +29,10 @@ public class IngestionService {
         this.semanticCache = semanticCache;
     }
 
-    /** Ingests classpath:documents/{tenant}/*.md, tagging every chunk with its tenant. */
     public int ingestAll() {
-        // Policy docs are changing → invalidate the semantic cache so no stale
-        // answer can be served after an update.
+
         semanticCache.clear();
-        // Idempotent: drop any previously-ingested chunks so re-running doesn't
-        // create duplicates that skew retrieval ranking.
+
         try {
             var all = vectorStore.similaritySearch(org.springframework.ai.vectorstore.SearchRequest.builder()
                     .query("*").topK(10_000).similarityThreshold(0.0).build());

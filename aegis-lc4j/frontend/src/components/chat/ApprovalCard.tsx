@@ -9,14 +9,11 @@ function statusTone(status: string): "good" | "warning" | "critical" {
   const s = status.toUpperCase();
   if (s.includes("APPROVED")) return "good";
   if (s.includes("REJECTED") || s.includes("DENIED")) return "critical";
-  return "warning"; // PENDING_HUMAN_APPROVAL — the only status this demo backend ever sets
+  return "warning"; 
 }
 
 const money = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-/** Renders the REAL approval record pushed by requestCardReplacement/issueProvisionalCredit
-    (see BankingTools.APPROVALS_KEY). Every one of these is a REQUEST for bank-staff
-    approval — the model can never move money directly — so the card leads with that. */
 export function ApprovalCard({ approval }: { approval: ApprovalData }) {
   const tone = statusTone(approval.status);
   const pending = tone === "warning";

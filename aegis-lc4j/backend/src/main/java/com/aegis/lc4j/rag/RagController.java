@@ -18,13 +18,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
-/**
- * Grounded policy Q&A endpoints (no tools, no memory — pure RAG):
- *   /api/rag/ask           simple retrieval-augmented answer
- *   /api/rag/ask-advanced  adds LLM query compression (pronoun-laden follow-ups
- *                          become standalone queries before retrieval)
- * Retrieval is ALWAYS filtered to the caller's tenant from the verified JWT.
- */
 @RestController
 @RequestMapping("/api/rag")
 public class RagController {

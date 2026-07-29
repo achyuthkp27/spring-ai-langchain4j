@@ -5,8 +5,6 @@ import clsx from "clsx";
 import { Bell, BellOff, Mail, Phone, Plane } from "lucide-react";
 import type { ProfileData } from "@/lib/sse";
 
-/** Renders the REAL customer-profile record pushed by updateContactInfo/setAlertPreferences/
-    setTravelNotice (see BankingTools.PROFILE_KEY), not the model's paraphrase of the change. */
 export function ProfileCard({ profile }: { profile: ProfileData }) {
   const travelActive = !!profile.travelNoticeUntil;
 

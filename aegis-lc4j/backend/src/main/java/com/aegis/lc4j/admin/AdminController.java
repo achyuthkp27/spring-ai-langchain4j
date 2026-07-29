@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
-/** Admin/ops API: ingestion, analytics, guardrail state. Requires PERM_admin:all. */
 @RestController
 @RequestMapping("/api/admin")
 public class AdminController {

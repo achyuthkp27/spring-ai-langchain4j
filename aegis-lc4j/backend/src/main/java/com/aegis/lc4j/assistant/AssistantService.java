@@ -18,17 +18,9 @@ import org.springframework.stereotype.Service;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
-/**
- * Builds the assistant PER REQUEST: the tools are constructed with the verified
- * Principal baked in, so identity is never a model-visible parameter. This is the
- * LangChain4j equivalent of Spring AI's ToolContext pattern — the model can
- * request actions, but the identity that authorizes them is not its to choose.
- */
 @Service
 public class AssistantService {
 
-    // Principled, general — correct behaviour is the job of a capable model +
-    // code guardrails, not an ever-growing prompt.
     static final String SYSTEM_PROMPT = """
             You are Aegis, the friendly banking assistant for this bank's customers.
             You are talking directly to the customer. Decide what to do yourself;
@@ -80,10 +72,6 @@ public class AssistantService {
         return p.tenantId() + ":" + p.userId() + ":" + conversationId;
     }
 
-    /**
-     * One guarded streaming turn. AiServices proxy construction is cheap; building
-     * it per request is what guarantees the identity invariant.
-     */
     public TokenStream chat(Principal principal, String conversationId, String message,
                             AtomicBoolean dynamicAccess, Consumer<String> statusSink) {
         var bankingTools = new BankingTools(banking, audit, principal, dynamicAccess, statusSink);

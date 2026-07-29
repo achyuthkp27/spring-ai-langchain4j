@@ -1,17 +1,24 @@
 import { NextRequest } from "next/server";
 
-/**
- * Dynamic backend proxy: forwards /api/* to whichever Aegis backend is running,
- * probing in priority order (merged → lc4j → original aegis-ai). The winner is
- * cached briefly so every request doesn't pay the probe cost. SSE responses are
- * streamed through untouched.
- */
+const IS_PROD = process.env.NODE_ENV === "production";
+
 const CANDIDATES = process.env.BACKEND_URL
   ? [process.env.BACKEND_URL]
-  : ["http://localhost:8082", "http://localhost:8081", "http://localhost:8080"];
+  : IS_PROD
+    ? []
+    : ["http://localhost:8082", "http://localhost:8081", "http://localhost:8080"];
 
 const PROBE_TIMEOUT_MS = 800;
+const FORWARD_TIMEOUT_MS = 30_000;
 const CACHE_TTL_MS = 10_000;
+const SEGMENT_PATTERN = /^[A-Za-z0-9._-]+$/;
+const HOP_BY_HOP_HEADERS = new Set([
+  "connection",
+  "keep-alive",
+  "transfer-encoding",
+  "content-encoding",
+  "content-length",
+]);
 
 let cached: { base: string; at: number } | null = null;
 
@@ -50,34 +57,42 @@ async function forward(req: NextRequest, base: string, path: string): Promise<Re
     method: req.method,
     headers,
     body: req.method === "GET" || req.method === "HEAD" ? undefined : req.body,
-    // @ts-expect-error duplex is required by Node fetch for streamed request bodies
     duplex: "half",
     cache: "no-store",
+    signal: AbortSignal.timeout(FORWARD_TIMEOUT_MS),
+  } as RequestInit & { duplex: "half" });
+
+  const responseHeaders = new Headers();
+  res.headers.forEach((value, key) => {
+    if (!HOP_BY_HOP_HEADERS.has(key.toLowerCase())) responseHeaders.set(key, value);
   });
-  // Pass the body stream through (SSE-safe) with the backend's content type.
-  return new Response(res.body, {
-    status: res.status,
-    headers: {
-      "content-type": res.headers.get("content-type") ?? "application/json",
-      "cache-control": "no-cache",
-    },
-  });
+  if (!responseHeaders.has("content-type")) responseHeaders.set("content-type", "application/json");
+  responseHeaders.set("cache-control", "no-cache");
+
+  return new Response(res.body, { status: res.status, headers: responseHeaders });
 }
 
 async function handle(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const { path } = await params;
+  if (path.some((segment) => !SEGMENT_PATTERN.test(segment))) {
+    return Response.json({ error: "Invalid path segment" }, { status: 400 });
+  }
   const joined = path.join("/");
+
+  if (CANDIDATES.length === 0) {
+    return Response.json({ error: "BACKEND_URL is not configured" }, { status: 502 });
+  }
+
   let base = await liveBackend();
   if (!base) {
-    return Response.json({ error: "No Aegis backend is running (tried 8082, 8081, 8080)" }, { status: 502 });
+    return Response.json({ error: "No Aegis backend is reachable" }, { status: 502 });
   }
   try {
     return await forward(req, base, joined);
   } catch {
-    // Cached backend may have just gone down — re-probe once and retry.
     base = await liveBackend(true);
     if (!base) {
-      return Response.json({ error: "No Aegis backend is running (tried 8082, 8081, 8080)" }, { status: 502 });
+      return Response.json({ error: "No Aegis backend is reachable" }, { status: 502 });
     }
     return forward(req, base, joined);
   }

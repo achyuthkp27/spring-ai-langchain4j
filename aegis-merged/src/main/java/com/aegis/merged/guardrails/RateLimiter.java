@@ -1,5 +1,7 @@
 package com.aegis.merged.guardrails;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
@@ -10,31 +12,24 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Per-tenant token-bucket rate limiter (OWASP LLM10: Unbounded Consumption).
- * A refill-over-time bucket: bounded burst, sustained rate cap.
- *
- * Backed by Redis (atomic via a single Lua script — a naive GET-then-SET would race across
- * instances) when {@code aegis.redis.enabled=true}; otherwise falls back to the original
- * in-memory bucket, which is correct for a single instance but NOT shared across replicas.
- */
 @Component
 public class RateLimiter {
 
-    private static final double CAPACITY = 20;          // burst
-    private static final double REFILL_PER_SEC = 1.0;   // sustained ~1 req/s/tenant
-    private static final long TTL_SECONDS = 3600;        // bucket key expiry (idle tenants)
+    private static final long TTL_SECONDS = 3600;
 
-    // Atomic token-bucket refill + consume: read current tokens/last-refill, compute the
-    // refill, decide allow/deny, write back — all in one round-trip so concurrent requests
-    // from different instances can never both consume the "last" token.
+    private final double userCapacity;
+    private final double userRefillPerSec;
+    private final double tenantCapacity;
+    private final double tenantRefillPerSec;
+
     private static final String BUCKET_SCRIPT = """
+            local time = redis.call('TIME')
+            local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
             local tokens = tonumber(redis.call('HGET', KEYS[1], 'tokens'))
             local last = tonumber(redis.call('HGET', KEYS[1], 'last'))
             local capacity = tonumber(ARGV[1])
             local refillPerSec = tonumber(ARGV[2])
-            local now = tonumber(ARGV[3])
-            if tokens == nil then
+            if tokens == nil or last == nil then
                 tokens = capacity
                 last = now
             end
@@ -46,7 +41,7 @@ public class RateLimiter {
                 allowed = 1
             end
             redis.call('HSET', KEYS[1], 'tokens', tostring(tokens), 'last', tostring(now))
-            redis.call('EXPIRE', KEYS[1], ARGV[4])
+            redis.call('EXPIRE', KEYS[1], ARGV[3])
             return allowed
             """;
 
@@ -59,35 +54,60 @@ public class RateLimiter {
     private final Optional<StringRedisTemplate> redis;
 
     public RateLimiter(Optional<StringRedisTemplate> redis) {
+        this(redis, 20, 1.0, 200, 10.0);
+    }
+
+    @Autowired
+    public RateLimiter(Optional<StringRedisTemplate> redis,
+                       @Value("${aegis.ratelimit.user-capacity:20}") double userCapacity,
+                       @Value("${aegis.ratelimit.user-refill-per-sec:1.0}") double userRefillPerSec,
+                       @Value("${aegis.ratelimit.tenant-capacity:200}") double tenantCapacity,
+                       @Value("${aegis.ratelimit.tenant-refill-per-sec:10.0}") double tenantRefillPerSec) {
         this.redis = redis;
+        this.userCapacity = userCapacity;
+        this.userRefillPerSec = userRefillPerSec;
+        this.tenantCapacity = tenantCapacity;
+        this.tenantRefillPerSec = tenantRefillPerSec;
     }
 
-    /** Returns true if allowed; false if the tenant is over its rate. */
     public boolean allow(String tenantId) {
-        if (redis.isPresent()) {
-            return allowRedis(tenantId);
-        }
-        return allowLocal(tenantId);
+        return allowBucket("aegis:ratelimit:tenant:" + tenantId, tenantCapacity, tenantRefillPerSec);
     }
 
-    private boolean allowRedis(String tenantId) {
-        String key = "aegis:ratelimit:" + tenantId;
+    public boolean allow(String tenantId, String userId) {
+        if (userId == null || userId.isBlank()) {
+            return allow(tenantId);
+        }
+        boolean userOk = allowBucket("aegis:ratelimit:user:" + tenantId + ":" + userId,
+                userCapacity, userRefillPerSec);
+        boolean tenantOk = allowBucket("aegis:ratelimit:tenant:" + tenantId,
+                tenantCapacity, tenantRefillPerSec);
+        return userOk && tenantOk;
+    }
+
+    private boolean allowBucket(String key, double capacity, double refillPerSec) {
+        if (redis.isPresent()) {
+            return allowRedis(key, capacity, refillPerSec);
+        }
+        return allowLocal(key, capacity, refillPerSec);
+    }
+
+    private boolean allowRedis(String key, double capacity, double refillPerSec) {
         Long allowed = redis.get().execute(SCRIPT, List.of(key),
-                String.valueOf(CAPACITY), String.valueOf(REFILL_PER_SEC),
-                String.valueOf(System.currentTimeMillis()), String.valueOf(TTL_SECONDS));
+                String.valueOf(capacity), String.valueOf(refillPerSec), String.valueOf(TTL_SECONDS));
         return allowed != null && allowed == 1L;
     }
 
-    private synchronized boolean allowLocal(String tenantId) {
+    private synchronized boolean allowLocal(String key, double capacity, double refillPerSec) {
         long now = System.nanoTime();
-        Bucket b = buckets.getOrDefault(tenantId, new Bucket(CAPACITY, now));
+        Bucket b = buckets.getOrDefault(key, new Bucket(capacity, now));
         double elapsedSec = (now - b.lastRefillNanos()) / 1_000_000_000.0;
-        double tokens = Math.min(CAPACITY, b.tokens() + elapsedSec * REFILL_PER_SEC);
+        double tokens = Math.min(capacity, b.tokens() + elapsedSec * refillPerSec);
         if (tokens < 1.0) {
-            buckets.put(tenantId, new Bucket(tokens, now));
+            buckets.put(key, new Bucket(tokens, now));
             return false;
         }
-        buckets.put(tenantId, new Bucket(tokens - 1.0, now));
+        buckets.put(key, new Bucket(tokens - 1.0, now));
         return true;
     }
 }

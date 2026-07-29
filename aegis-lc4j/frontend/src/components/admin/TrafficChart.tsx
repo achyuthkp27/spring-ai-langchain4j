@@ -5,12 +5,6 @@ import clsx from "clsx";
 import { Table2, LineChart as LineChartIcon } from "lucide-react";
 import type { TimeseriesPoint } from "@/lib/adminApi";
 
-// Status-mapped series: llm = primary/neutral activity (accent), cache = fast/good path,
-// blocked = a guardrail intercepted it (warning), error/unavailable = failure (critical).
-// Palette validated with the dataviz skill's validate_palette.js against this app's actual
-// light/dark surfaces — CVD separation and normal-vision floor both pass; only the fixed
-// status palette's own documented low-contrast quirk (warning on light) remains, which is
-// why every series is ALSO direct-labeled here (legend + tooltip), never color-alone.
 const SERIES: { key: keyof Omit<TimeseriesPoint, "minute">; label: string; varName: string }[] = [
   { key: "llm", label: "Model calls", varName: "--accent" },
   { key: "cache", label: "Cache hits", varName: "--good" },
@@ -68,7 +62,7 @@ export function TrafficChart({ data }: { data: TimeseriesPoint[] }) {
 
   return (
     <div>
-      {/* Legend — icon+label always present, never color-alone (dataviz skill accessibility pass) */}
+      {}
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-3">
           {SERIES.map((s) => (
@@ -128,7 +122,7 @@ export function TrafficChart({ data }: { data: TimeseriesPoint[] }) {
             }}
             onMouseLeave={() => setHoverIdx(null)}
           >
-            {/* Recessive gridline baseline */}
+            {}
             <line
               x1={PAD_LEFT}
               y1={HEIGHT - PAD_BOTTOM}

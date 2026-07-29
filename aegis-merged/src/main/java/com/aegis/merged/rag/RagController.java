@@ -11,11 +11,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * Grounded RAG endpoint. Tenant isolation is enforced at retrieval time via a
- * server-side filter expression built from the authenticated tenant — NEVER from
- * user input. This is the mitigation for OWASP LLM08 (vector/embedding weaknesses).
- */
 @RestController
 @RequestMapping("/api/rag")
 public class RagController {
@@ -37,20 +32,17 @@ public class RagController {
 
     @PostMapping("/ask")
     public AskResponse ask(@RequestBody AskRequest request) {
-        // Tenant comes from the verified JWT claim, never from user input.
-        String tenantId = CurrentUser.get().tenantId();
-        // Typed builder, NOT string concatenation — see PolicySearchTool/PolicyTools for the
-        // exact same pattern and its rationale. tenantId is a JWT claim so this is defense in
-        // depth rather than the only barrier, but a hand-built "tenantId == '" + tenantId + "'"
-        // string is a filter-injection sink the moment that assumption is wrong even once.
+        
+        var principal = CurrentUser.get();
+        String tenantId = principal.tenantId();
+
         var filter = new org.springframework.ai.vectorstore.filter.FilterExpressionBuilder()
                 .eq("tenantId", tenantId).build();
         var qaAdvisor = QuestionAnswerAdvisor.builder(vectorStore)
                 .searchRequest(SearchRequest.builder()
                         .topK(6)
                         // Local embedding models (nomic) score lower than hosted ones;
-                        // a lenient threshold improves recall. Tenant isolation is
-                        // unaffected — the filter is a hard SQL WHERE, not a similarity knob.
+
                         .similarityThreshold(0.1)
                         .filterExpression(filter)
                         .build())
@@ -58,7 +50,8 @@ public class RagController {
 
         String answer = ragClient.prompt()
                 .advisors(qaAdvisor)
-                .advisors(a -> a.param(GuardrailAdvisor.TENANT_PARAM, tenantId))
+                .advisors(a -> a.param(GuardrailAdvisor.TENANT_PARAM, tenantId)
+                        .param(GuardrailAdvisor.USER_PARAM, principal.userId()))
                 .user(request.question())
                 .call()
                 .content();

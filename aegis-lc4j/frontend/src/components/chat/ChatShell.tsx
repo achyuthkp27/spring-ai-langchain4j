@@ -26,8 +26,6 @@ import { StatusChips } from "./StatusChips";
 import { Composer } from "./Composer";
 import { Sidebar } from "./Sidebar";
 
-// Each suggestion carries its own tone so the chip row reads as distinct categories at a
-// glance (matching the reference's colored-icon-badge pattern) rather than one flat color.
 const SUGGESTIONS = [
   { text: "What's my balance?", icon: Wallet, tone: "accent" as const },
   { text: "Show my recent transactions", icon: ListChecks, tone: "system" as const },
@@ -37,9 +35,10 @@ const SUGGESTIONS = [
 ];
 
 export function ChatShell() {
-  const { conversations, activeId, setActiveId, create, titleFrom, remove } = useConversations();
-  const { messages, statuses, busy, historyError, send, loadHistory } = useChatStream(activeId);
   const { profile, bankName, switchTo } = useSession();
+  const identityKey = profile ? `${profile.tenantId}:${profile.userId}` : null;
+  const { conversations, activeId, setActiveId, create, titleFrom, remove } = useConversations(identityKey);
+  const { messages, statuses, busy, historyError, send, loadHistory } = useChatStream(activeId);
   const [menuOpen, setMenuOpen] = useState(false);
   const [dark, setDark] = useState(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -55,8 +54,6 @@ export function ChatShell() {
     loadHistory();
   }, [loadHistory]);
 
-  // Only auto-scroll if the reader was already near the bottom — otherwise a new token
-  // shouldn't yank someone back down while they're reading earlier messages.
   useEffect(() => {
     if (nearBottomRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -74,7 +71,6 @@ export function ChatShell() {
 
   const scrollToBottom = () => bottomRef.current?.scrollIntoView({ behavior: "smooth" });
 
-  // Cmd/Ctrl+K for a new chat — the shortcut every AI-chat product ships.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -116,7 +112,7 @@ export function ChatShell() {
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Header */}
+        {}
         <header className="flex items-center gap-3 px-4 py-3">
           <button
             className="md:hidden rounded-full p-1.5 text-muted hover:bg-pill transition-colors"
@@ -140,7 +136,7 @@ export function ChatShell() {
           </button>
         </header>
 
-        {/* Messages */}
+        {}
         <main ref={mainRef} onScroll={handleScroll} className="relative flex-1 overflow-y-auto px-4 py-5">
           <div
             className="mx-auto flex max-w-2xl flex-col gap-3"
@@ -212,7 +208,7 @@ export function ChatShell() {
           </AnimatePresence>
         </main>
 
-        {/* Composer */}
+        {}
         <footer className="px-4 pb-4 pt-1">
           <div className="mx-auto max-w-2xl">
             <Composer onSend={handleSend} onNewChat={create} disabled={busy} />

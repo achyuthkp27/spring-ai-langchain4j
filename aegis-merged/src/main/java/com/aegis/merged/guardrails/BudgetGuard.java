@@ -1,5 +1,7 @@
 package com.aegis.merged.guardrails;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
@@ -15,16 +17,6 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * Per-tenant token budget (OWASP LLM10: Unbounded Consumption). Denies a request
- * once a tenant exceeds its quota BEFORE spending money on the model call.
- *
- * Backed by Redis (atomic INCRBY-with-expiry via Lua, so a fresh daily key is created
- * exactly once) when {@code aegis.redis.enabled=true} — required for the daily counter AND
- * the per-tenant budget limit to be consistent across instances (an admin's
- * {@code POST /api/admin/budget} on one instance must be visible on every other instance).
- * Falls back to the original in-memory maps otherwise.
- */
 @Component
 public class BudgetGuard {
 
@@ -34,10 +26,8 @@ public class BudgetGuard {
         }
     }
 
-    private static final long DEFAULT_BUDGET = 100_000;
+    private final long defaultBudget;
 
-    // Atomic "increment, and set expiry only on first creation" — a naive INCRBY then EXPIRE
-    // would re-arm the TTL on every call, and a naive GET-then-SET would race across instances.
     private static final String INCR_SCRIPT = """
             local val = redis.call('INCRBY', KEYS[1], ARGV[1])
             if val == tonumber(ARGV[1]) then
@@ -47,9 +37,6 @@ public class BudgetGuard {
             """;
     private static final RedisScript<Long> INCR = new DefaultRedisScript<>(INCR_SCRIPT, Long.class);
 
-    /** Consumption is tracked per UTC day — the budget is a DAILY quota. Without a
-        window, a tenant that ever crossed the limit stayed locked out until a
-        restart or a manual budget bump. */
     private record Window(long epochDay, AtomicLong used) {
     }
 
@@ -58,7 +45,14 @@ public class BudgetGuard {
     private final Optional<StringRedisTemplate> redis;
 
     public BudgetGuard(Optional<StringRedisTemplate> redis) {
+        this(redis, 100_000);
+    }
+
+    @Autowired
+    public BudgetGuard(Optional<StringRedisTemplate> redis,
+                       @Value("${aegis.budget.default-daily-tokens:100000}") long defaultBudget) {
         this.redis = redis;
+        this.defaultBudget = defaultBudget;
     }
 
     public void setBudget(String tenant, long budget) {
@@ -72,9 +66,9 @@ public class BudgetGuard {
     private long budgetFor(String tenant) {
         if (redis.isPresent()) {
             String v = redis.get().opsForValue().get("aegis:budget:limit:" + tenant);
-            return v != null ? Long.parseLong(v) : DEFAULT_BUDGET;
+            return v != null ? Long.parseLong(v) : defaultBudget;
         }
-        return budgets.getOrDefault(tenant, DEFAULT_BUDGET);
+        return budgets.getOrDefault(tenant, defaultBudget);
     }
 
     public void checkOrThrow(String tenant) {
@@ -107,7 +101,7 @@ public class BudgetGuard {
     private static long secondsUntilNextUtcDay() {
         ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
         ZonedDateTime midnight = now.toLocalDate().plusDays(1).atStartOfDay(ZoneOffset.UTC);
-        return Duration.between(now, midnight).getSeconds() + 60; // small buffer
+        return Duration.between(now, midnight).getSeconds() + 60; 
     }
 
     private AtomicLong todays(String tenant) {

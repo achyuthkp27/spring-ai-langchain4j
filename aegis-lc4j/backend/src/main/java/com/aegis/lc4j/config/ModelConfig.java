@@ -14,15 +14,6 @@ import org.springframework.context.annotation.Primary;
 
 import java.time.Duration;
 
-/**
- * Manual model wiring (no LC4j Spring starter): we need FOUR distinct models —
- * a streaming chat model for the assistant, a blocking chat model for the scope
- * classifier / query rewriting, the retrieval embedding model (nomic, 768-dim)
- * and a separate symmetric-similarity model for the semantic cache (all-minilm).
- *
- * qwen3.5 is a thinking model; think=false keeps tool-calling latency sane and
- * stops reasoning tokens from leaking into the stream.
- */
 @Configuration
 public class ModelConfig {
 
@@ -61,7 +52,6 @@ public class ModelConfig {
                 .build();
     }
 
-    /** Deterministic 4-token classifier variant of the chat model for the ScopeGate. */
     @Bean
     @Qualifier("classifierModel")
     ChatModel classifierModel(
@@ -90,7 +80,6 @@ public class ModelConfig {
                 .build();
     }
 
-    /** Dedicated symmetric sentence-similarity model for the semantic cache. */
     @Bean
     @Qualifier("cacheEmbeddingModel")
     EmbeddingModel cacheEmbeddingModel(

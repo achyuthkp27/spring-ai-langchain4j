@@ -4,15 +4,10 @@ import { AnimatePresence, motion } from "framer-motion";
 import clsx from "clsx";
 import { Loader2, Sparkles } from "lucide-react";
 
-/** True for the router's escalation notice — visually distinct from ordinary tool-progress
-    chips (see ModelRouter/AssistantController on the backend) so escalating to the bigger
-    model is actually visible/demoable instead of blending into "Searching policy documents…". */
 function isEscalation(status: string): boolean {
   return status.toLowerCase().includes("extended reasoning");
 }
 
-/** Live tool-progress pills ("Freezing card CRD-7001…") during a turn, plus a distinct
-    "escalated to the bigger model" pill when the router cascades. */
 export function StatusChips({ statuses }: { statuses: string[] }) {
   return (
     <div className="flex flex-wrap gap-1.5 min-h-0">

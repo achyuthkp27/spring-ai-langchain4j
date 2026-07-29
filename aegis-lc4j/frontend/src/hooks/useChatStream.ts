@@ -35,7 +35,7 @@ export interface Message {
 
 export interface ChatState {
   messages: Message[];
-  statuses: string[]; // live tool-progress chips for the in-flight turn
+  statuses: string[]; 
   busy: boolean;
   historyError: boolean;
 }
@@ -43,10 +43,6 @@ export interface ChatState {
 let nextId = 0;
 const id = () => `m${++nextId}`;
 
-// Shared merge-by-id logic — used identically by the LIVE SSE handlers below and by
-// history replay, so a page reload renders exactly what the live stream would have shown.
-// A later emission (e.g. freezeCard's single updated card, after an earlier listCards'
-// full set) updates matching entries in place rather than replacing the whole list.
 function mergeById<T, K>(existing: T[] | undefined, incoming: T[], keyOf: (t: T) => K): T[] {
   const byId = new Map((existing ?? []).map((t) => [keyOf(t), t]));
   incoming.forEach((t) => byId.set(keyOf(t), t));
@@ -61,8 +57,6 @@ const mergeTransactions = (existing: TransactionData[] | undefined, incoming: Tr
 const mergeLedger = (existing: LedgerEntryData[] | undefined, incoming: LedgerEntryData[]) =>
   mergeById(existing, incoming, (e) => e.entryId);
 
-/** Replays one historical assistant message's persisted widget events, in order, through
-    the SAME merge functions the live stream uses — see WidgetHistoryStore (aegis-merged). */
 function hydrateAssistantMessage(h: HistoryMessage): Message {
   let msg: Message = { id: id(), role: "assistant", text: h.text };
   for (const w of h.widgets) {
@@ -137,13 +131,25 @@ export function useChatStream(conversationId: string) {
 
       const controller = new AbortController();
       abortRef.current = controller;
-      const token = await getToken();
 
       const patchBot = (fn: (m: Message) => Message) =>
         setState((s) => ({
           ...s,
           messages: s.messages.map((m) => (m.id === botId ? fn(m) : m)),
         }));
+
+      let token: string;
+      try {
+        token = await getToken();
+      } catch {
+        patchBot((m) => ({
+          ...m,
+          streaming: false,
+          text: "Couldn't sign you in. Please refresh and try again.",
+        }));
+        setState((s) => ({ ...s, statuses: [], busy: false }));
+        return;
+      }
 
       await streamChat(
         token,
@@ -173,6 +179,10 @@ export function useChatStream(conversationId: string) {
               streaming: false,
               text: m.text || "Something went wrong reaching the assistant. Please try again.",
             }));
+            setState((s) => ({ ...s, statuses: [], busy: false }));
+          },
+          onAbort: () => {
+            patchBot((m) => ({ ...m, streaming: false }));
             setState((s) => ({ ...s, statuses: [], busy: false }));
           },
         },

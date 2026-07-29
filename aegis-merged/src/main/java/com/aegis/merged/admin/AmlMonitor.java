@@ -9,19 +9,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-/**
- * Rule-based transaction-monitoring scaffolding — Phase 2 of the production roadmap. This is
- * genuinely useful as a first line of defense and as the shape a real system needs, but it is
- * NOT a real AML program: a licensed institution's transaction monitoring runs on years of
- * labeled data, typology libraries, and a compliance team that files actual SARs/CTRs with
- * FinCEN. Two rules, both simple and explainable on purpose — the point is the pattern
- * (flag first, staff decide), not sophistication a demo can't honestly claim.
- */
 @Component
 public class AmlMonitor {
 
     private static final BigDecimal LARGE_TRANSACTION_THRESHOLD = new BigDecimal("5000");
-    private static final int VELOCITY_THRESHOLD = 3; // more than this many same-day transactions
+    private static final int VELOCITY_THRESHOLD = 3; 
 
     public record Flag(String accountId, String type, String detail, String severity) {
     }
@@ -32,7 +24,6 @@ public class AmlMonitor {
         this.banking = banking;
     }
 
-    /** Scans every transaction on one account for the two rules below. */
     public List<Flag> scanAccount(String accountId) {
         List<Flag> flags = new ArrayList<>();
         var txns = banking.getTransactions(accountId);
@@ -58,7 +49,6 @@ public class AmlMonitor {
         return flags;
     }
 
-    /** Scans every account in a tenant — the admin dashboard's entry point. */
     public List<Flag> scanTenant(String tenantId) {
         List<Flag> out = new ArrayList<>();
         for (var account : banking.allAccountsForTenant(tenantId)) {

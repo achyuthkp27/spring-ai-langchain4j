@@ -6,7 +6,6 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 
-/** Latency + token usage metrics to Micrometer (scraped at /actuator/prometheus). */
 @Component
 public class TokenAudit {
 

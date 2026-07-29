@@ -1,11 +1,5 @@
 package com.aegis.merged.assistant;
 
-/**
- * Stateful streaming filter that drops qwen-style <think>…</think> reasoning
- * spans. Defence-in-depth: the model runs with think=false, but if reasoning
- * text ever leaks it must not reach the client. Handles tags split across
- * token chunks by holding back a partial "<thi" style suffix until resolved.
- */
 final class ThinkTagFilter {
 
     private static final String OPEN = "<think>";
@@ -14,7 +8,6 @@ final class ThinkTagFilter {
     private final StringBuilder held = new StringBuilder();
     private boolean insideThink;
 
-    /** Feed one raw chunk; returns the text safe to pass downstream (possibly empty). */
     String accept(String chunk) {
         held.append(chunk);
         StringBuilder out = new StringBuilder();
@@ -22,7 +15,7 @@ final class ThinkTagFilter {
             if (insideThink) {
                 int close = held.indexOf(CLOSE);
                 if (close < 0) {
-                    // Still inside reasoning — drop everything except a possible partial close tag.
+                    
                     keepOnlyPartialSuffix(CLOSE);
                     return out.toString();
                 }
@@ -31,7 +24,7 @@ final class ThinkTagFilter {
             } else {
                 int open = held.indexOf(OPEN);
                 if (open < 0) {
-                    // Emit everything except a possible partial open tag at the end.
+                    
                     int hold = partialSuffixLength(OPEN);
                     out.append(held, 0, held.length() - hold);
                     held.delete(0, held.length() - hold);
@@ -44,7 +37,6 @@ final class ThinkTagFilter {
         }
     }
 
-    /** Anything still held that is not a partial tag (call at end of stream). */
     String flush() {
         if (insideThink) {
             held.setLength(0);
@@ -60,7 +52,6 @@ final class ThinkTagFilter {
         held.delete(0, held.length() - hold);
     }
 
-    /** Length of the longest strict-prefix of {@code tag} that ends the buffer. */
     private int partialSuffixLength(String tag) {
         int max = Math.min(tag.length() - 1, held.length());
         for (int len = max; len > 0; len--) {

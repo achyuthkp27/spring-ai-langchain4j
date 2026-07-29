@@ -6,7 +6,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
-/** Observe the LLM circuit breaker state — handy to watch during the stress test. */
 @RestController
 @RequestMapping("/api/admin/circuit")
 public class CircuitAdminController {

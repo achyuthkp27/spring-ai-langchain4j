@@ -27,7 +27,7 @@ export function MessageBubble({ message }: { message: Message }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1400);
     } catch {
-      // clipboard API unavailable — silently skip, not worth surfacing an error for
+      
     }
   };
 
@@ -62,8 +62,7 @@ export function MessageBubble({ message }: { message: Message }) {
             </div>
           )}
           {message.meta && message.meta.source !== "llm" && (
-            // Text stays in muted ink (never the series/status color itself) — only the
-            // icon carries the status hue, per the dataviz skill's text-token rule.
+
             <div className="mt-1.5 flex items-center gap-1 text-[11px] font-medium text-muted">
               {message.meta.source === "cache" ? (
                 <>

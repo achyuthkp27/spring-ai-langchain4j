@@ -36,17 +36,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
-/**
- * THE assistant endpoint — one API, always streaming SSE. Events:
- *   token  {"t": "..."}   sanitized answer chunks
- *   status {"s": "..."}   tool-progress lines ("Freezing card CRD-7001…")
- *   meta   {source, elapsedMs, ...}   terminal summary
- *
- * All guardrails run inline on this path: rate/budget/injection/scope gates
- * BEFORE the model call; think-tag stripping, PII redaction and tool-leak
- * suppression at safe line boundaries BEFORE each flush (you can't un-send a
- * token, so we sanitize per completed segment, not per token).
- */
 @RestController
 @RequestMapping("/api/assistant")
 public class AssistantController {
@@ -67,8 +56,7 @@ public class AssistantController {
     private final AuditTrail audit;
     private final TokenAudit tokenAudit;
     private final ObjectMapper json = new ObjectMapper();
-    // The gates (cache embedding, scope classifier) can take ~1s; run the whole
-    // pipeline off the request thread so the emitter is returned immediately.
+
     private final ExecutorService pipeline = Executors.newCachedThreadPool(r -> {
         Thread t = new Thread(r, "assistant-pipeline");
         t.setDaemon(true);
@@ -105,7 +93,6 @@ public class AssistantController {
                             long elapsedMs, Double similarity, String matchedQuestion) {
     }
 
-    /** Restore a conversation after a page refresh — memory key is built from the VERIFIED principal. */
     @GetMapping("/history")
     public List<Map<String, String>> history(@RequestParam(defaultValue = "default") String conversationId) {
         Principal principal = CurrentUser.get();
@@ -125,7 +112,7 @@ public class AssistantController {
     @PostMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream(@RequestBody ChatRequest request) {
         long start = System.nanoTime();
-        // Capture identity BEFORE the async dispatch — no security context on pipeline threads.
+        
         Principal principal = CurrentUser.get();
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
         pipeline.submit(() -> run(emitter, principal, request, start));
@@ -140,7 +127,7 @@ public class AssistantController {
         String redactedQ = piiRedactor.redact(request.message());
 
         try {
-            // --- INPUT GUARDRAILS ---
+            
             if (!rateLimiter.allow(tenantId)) {
                 audit.record(tenantId, userId, cid, "blocked-rate", ms(start), 0, redactedQ);
                 oneShot(emitter, cid, "You're sending requests too quickly. Please slow down and retry.",
@@ -161,7 +148,6 @@ public class AssistantController {
                 return;
             }
 
-            // --- SEMANTIC CACHE: instant, emit the whole answer as one chunk ---
             var hit = semanticCache.lookup(tenantId, request.message());
             if (hit.isPresent()) {
                 audit.record(tenantId, userId, cid, "cache", ms(start), hit.get().answer().length(), redactedQ);
@@ -169,7 +155,6 @@ public class AssistantController {
                 return;
             }
 
-            // --- SCOPE GATE (code-enforced): decline off-domain before streaming ---
             if (!scopeGate.inScope(request.message(), memoryKey)) {
                 audit.record(tenantId, userId, cid, "blocked-scope", ms(start), 0, redactedQ);
                 oneShot(emitter, cid, ScopeGate.REDIRECT, "blocked", start, null);
@@ -197,15 +182,12 @@ public class AssistantController {
         StringBuilder pending = new StringBuilder();
         ThinkTagFilter thinkFilter = new ThinkTagFilter();
 
-        // Throws immediately (friendly refusal) if the circuit is open.
         LlmResilience.StreamCall call = resilience.startStreamCall(() -> {
             if (finished.compareAndSet(false, true)) {
                 unavailable(emitter, principal, cid, start, redactedQ, LlmResilience.TIMEOUT_MESSAGE);
             }
         });
 
-        // Tool-progress side channel: tools push status lines that egress immediately
-        // as SSE "status" events, so the user sees what's happening during tool calls.
         Consumer<String> statusSink = s -> {
             call.tick();
             if (!finished.get()) {
@@ -222,9 +204,7 @@ public class AssistantController {
             if (visible.isEmpty()) return;
             full.append(visible);
             pending.append(visible);
-            // Flush up to the last SAFE boundary (newline / sentence end): these never
-            // fall inside a PAN/SSN/IBAN/email, so redacting the flushed segment can't
-            // miss a value split across the boundary.
+
             int b = lastSafeBoundary(pending);
             if (b > 0) {
                 String segment = pending.substring(0, b);
@@ -242,8 +222,7 @@ public class AssistantController {
                 full.append(flushed);
                 sendToken(emitter, tail);
             }
-            // Redact BEFORE caching / meta: token events are redacted per segment, but
-            // `full` is the raw stream — a cache hit or meta replay must never leak PII.
+
             String answer = piiRedactor.redact(full.toString());
             if (isSafeToCache(answer, dynamic.get())) {
                 semanticCache.put(tenantId, request.message(), answer);
@@ -254,7 +233,7 @@ public class AssistantController {
                 in = usage.inputTokenCount() == null ? 0 : usage.inputTokenCount();
                 out = usage.outputTokenCount() == null ? 0 : usage.outputTokenCount();
             }
-            // Exact usage when the provider reports it; ~4 chars/token heuristic otherwise.
+            
             budgetGuard.record(tenantId, usage != null ? in + out : Math.max(1, answer.length() / 4));
             long elapsed = ms(start);
             tokenAudit.record(tenantId, "llm", Duration.ofMillis(elapsed), in, out);
@@ -287,7 +266,6 @@ public class AssistantController {
         emitter.complete();
     }
 
-    /** Emit a full answer as a single token event + meta (cache hit or a blocked path). */
     private void oneShot(SseEmitter emitter, String cid, String answer, String source,
                          long start, SemanticCache.Hit hit) {
         long elapsed = ms(start);
@@ -299,7 +277,6 @@ public class AssistantController {
         emitter.complete();
     }
 
-    /** A leaked tool-call line is dropped; PII in a line is redacted; then it egresses. */
     private void sendToken(SseEmitter emitter, String segment) {
         String safe = looksLikeLeakedToolCall(segment) ? "" : piiRedactor.redact(segment);
         if (!safe.isEmpty()) {
@@ -311,12 +288,11 @@ public class AssistantController {
         try {
             emitter.send(SseEmitter.event().name(event).data(toJson(payload), MediaType.TEXT_PLAIN));
         } catch (Exception e) {
-            // Client went away mid-stream — nothing to do, the emitter is dead.
+            
             log.debug("sse.send.failed {}", e.getMessage());
         }
     }
 
-    /** True when the model's answer is (mostly) a raw tool-call JSON blob. */
     static boolean looksLikeLeakedToolCall(String text) {
         if (text == null) return false;
         String t = text.trim();
@@ -324,10 +300,6 @@ public class AssistantController {
         return t.contains("\"name\"") && (t.contains("\"parameters\"") || t.contains("\"arguments\""));
     }
 
-    /**
-     * Index just past the last "safe to flush" point: a newline, or a sentence-ending
-     * . ? ! followed by a space (or end). PII patterns never contain these. -1 if none.
-     */
     static int lastSafeBoundary(CharSequence s) {
         for (int i = s.length() - 1; i >= 0; i--) {
             char c = s.charAt(i);
@@ -338,7 +310,6 @@ public class AssistantController {
         return -1;
     }
 
-    /** Don't cache dynamic (account/action) answers, refusals, or "couldn't find" replies. */
     private static boolean isSafeToCache(String answer, boolean dynamic) {
         if (dynamic || answer == null) return false;
         String a = answer.toLowerCase();

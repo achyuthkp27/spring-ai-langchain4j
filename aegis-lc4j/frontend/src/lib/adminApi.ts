@@ -1,7 +1,4 @@
-/** Admin-role session, separate from the customer session in api.ts — a different JWT
-    (role: "admin") is required for every /api/admin/** call (see aegis-merged's
-    SecurityConfig: PERM_admin:all). Kept in its own sessionStorage slot so switching the
-    customer demo identity never disturbs an open admin session and vice versa. */
+
 const ADMIN_TOKEN_KEY = "aegis.admin.jwt";
 
 interface CachedAdminToken {

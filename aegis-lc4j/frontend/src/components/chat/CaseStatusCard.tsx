@@ -5,10 +5,6 @@ import clsx from "clsx";
 import { FileQuestion } from "lucide-react";
 import type { CaseData } from "@/lib/sse";
 
-// Deliberately just a status badge, not a fake multi-step progress tracker — the backend
-// has no state machine beyond what it actually returns, so implying stages it can't reach
-// would be dishonest UI. Tone mapping is generic so a future status (RESOLVED/REJECTED)
-// slots in without a frontend change.
 function statusTone(status: string): "good" | "warning" | "critical" | "accent" {
   const s = status.toUpperCase();
   if (s.includes("RESOLVED") || s.includes("APPROVED")) return "good";
@@ -17,8 +13,6 @@ function statusTone(status: string): "good" | "warning" | "critical" | "accent" 
   return "accent";
 }
 
-/** Renders the REAL dispute-case record pushed by createDisputeCase/getCaseStatus (see
-    BankingTools.CASES_KEY) instead of the model's plain-text status line. */
 export function CaseStatusCard({ caseData }: { caseData: CaseData }) {
   const tone = statusTone(caseData.status);
 

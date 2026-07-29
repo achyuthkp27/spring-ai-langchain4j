@@ -19,24 +19,11 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
-/**
- * Resilience around every LLM call. Ollama serialises generation, so under load
- * calls queue; without a guard a slow model pins request threads until the pool
- * starves. Two protections:
- *   - a hard TIMEOUT so no call hangs forever, and
- *   - a CIRCUIT BREAKER that opens after repeated failures/slow calls and fails
- *     new requests instantly with a friendly message while Ollama recovers.
- *
- * The blocking path uses {@link #call}. The streaming path (LangChain4j
- * TokenStream is callback-based, not reactive) uses {@link #startStreamCall}:
- * acquire a breaker permission up front, arm a watchdog, then report the outcome.
- */
 @Component
 public class LlmResilience {
 
     private static final Logger log = LoggerFactory.getLogger(LlmResilience.class);
 
-    /** Thrown when the breaker is open or a call times out. */
     public static class LlmUnavailableException extends RuntimeException {
         public LlmUnavailableException(String message) { super(message); }
     }
@@ -45,8 +32,7 @@ public class LlmResilience {
     public static final String TIMEOUT_MESSAGE = "That request took too long. Please try again.";
 
     private static final Duration TIMEOUT = Duration.ofSeconds(30);
-    // First token can legitimately take a while (model load, tool round-trips);
-    // the stream watchdog fires only if NOTHING has arrived for this long.
+
     private static final Duration STREAM_IDLE_TIMEOUT = Duration.ofSeconds(45);
 
     private final CircuitBreaker breaker;
@@ -82,7 +68,6 @@ public class LlmResilience {
                         e.getStateTransition().getToState()));
     }
 
-    /** Blocking call, guarded by circuit breaker + hard timeout. */
     public <T> T call(Supplier<T> supplier) {
         Callable<T> timed = TimeLimiter.decorateFutureSupplier(timeLimiter,
                 () -> CompletableFuture.supplyAsync(supplier, pool));
@@ -94,16 +79,12 @@ public class LlmResilience {
             throw new LlmUnavailableException(BUSY_MESSAGE);
         } catch (LlmUnavailableException e) {
             throw e;
-        } catch (Exception e) {   // includes TimeoutException from the time limiter
+        } catch (Exception e) {   
             log.warn("llm.call.failed {}", e.toString());
             throw new LlmUnavailableException(TIMEOUT_MESSAGE);
         }
     }
 
-    /**
-     * Handle for one guarded streaming call. Call {@link #tick} on every token
-     * (feeds the idle watchdog), then exactly one of success/failure.
-     */
     public final class StreamCall {
         private final long startNanos = System.nanoTime();
         private volatile long lastActivityNanos = startNanos;
@@ -144,10 +125,6 @@ public class LlmResilience {
         }
     }
 
-    /**
-     * Acquire a breaker permission for a streaming call, or throw
-     * {@link LlmUnavailableException} immediately if the circuit is open.
-     */
     public StreamCall startStreamCall(Runnable onIdleTimeout) {
         try {
             breaker.acquirePermission();

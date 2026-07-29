@@ -1,5 +1,6 @@
 package com.aegis.merged.security;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -9,6 +10,12 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 public class SecurityConfig {
@@ -20,39 +27,45 @@ public class SecurityConfig {
     }
 
     @Bean
-    SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    CorsConfigurationSource corsConfigurationSource(
+            @Value("${aegis.cors.allowed-origins:}") String allowedOriginsCsv) {
+        CorsConfiguration config = new CorsConfiguration();
+        List<String> origins = allowedOriginsCsv == null || allowedOriginsCsv.isBlank()
+                ? List.of()
+                : Arrays.stream(allowedOriginsCsv.split(",")).map(String::trim).toList();
+        config.setAllowedOrigins(origins);
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        config.setAllowCredentials(true);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
+    }
+
+    @Bean
+    SecurityFilterChain filterChain(HttpSecurity http, CorsConfigurationSource corsConfigurationSource)
+            throws Exception {
         http
-                .csrf(AbstractHttpConfigurer::disable)   // stateless JWT API, not cookie-based
+                .csrf(AbstractHttpConfigurer::disable)   
+                .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // Authorize only the initial REQUEST dispatch, not ASYNC/ERROR.
-                        // The SSE streaming endpoints return a Flux → Spring MVC does an
-                        // async re-dispatch after the body is sent; re-authorizing it
-                        // (with no security context on that thread) threw AccessDenied on
-                        // an already-committed response and reset the stream. The request
-                        // is fully authorized on REQUEST; the continuation needs no re-check.
+
                         .shouldFilterAllDispatcherTypes(false)
-                        // Public: the UIs, dev login, health. (admin.html is a static shell —
-                        // every API it calls needs an admin JWT.)
+
                         .requestMatchers("/", "/index.html", "/admin.html", "/api/auth/**",
                                 "/actuator/health/**",
                                 "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
-                        // MCP transport: PolicyTools.searchPolicies takes tenantId as an
-                        // explicit caller-supplied param (by design, for org-wide cross-tenant
-                        // discovery by trusted agents) — an unauthenticated caller must not
-                        // reach it at all, so any valid JWT (not a specific tenant/role) gates
-                        // the transport itself rather than the individual tool.
+
                         .requestMatchers("/sse", "/mcp/**").authenticated()
-                        // Token spend is tagged by tenant (see TokenAuditAdvisor) — public
-                        // metrics would let anyone enumerate the tenant list and their spend.
+
                         .requestMatchers("/actuator/prometheus").hasAuthority("PERM_admin:all")
-                        // All admin APIs (analytics, budget, circuit, ingest, cache) need
-                        // the admin permission from a verified JWT.
+
                         .requestMatchers("/api/admin/**").hasAuthority("PERM_admin:all")
-                        // Everything else (the app APIs) requires a valid JWT.
+                        
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e.authenticationEntryPoint(
-                        new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))   // 401, not 403
+                        new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))   
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }

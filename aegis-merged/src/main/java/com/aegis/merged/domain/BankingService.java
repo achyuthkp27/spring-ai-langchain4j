@@ -12,18 +12,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * In-memory banking domain stand-in so the assistant has real state to act on.
- * Accounts carry an ownerUserId: the customer-facing bot may only ever touch the
- * authenticated customer's own accounts (enforced inside the tools).
- *
- * Money-adjacent state (balances) is backed by a real double-entry ledger — see
- * {@link LedgerEntry} and {@link #transfer} — rather than a balance field mutated in place,
- * so every change is reconstructable and reconcilable, which is the actual production-grade
- * bar for anything touching money (Phase 2 of the roadmap). Everything else here is still a
- * simplified fixture: a real deployment replaces this whole class with a real core banking
- * platform or ledger-as-a-service, not just a bigger version of this one.
- */
 @Service
 public class BankingService {
 
@@ -43,14 +31,10 @@ public class BankingService {
                               String status, boolean fraudFlag, boolean escalated, int evidenceCount) {
     }
 
-    public record Approval(String approvalId, String subject, BigDecimal amount,
+    public record Approval(String approvalId, String tenantId, String subject, BigDecimal amount,
                            String requestedBy, String status) {
     }
 
-    /** One posted ledger movement. Every balance change in this system exists because of one
-        of these — there is no other way to move a balance. Two entries (a DEBIT and a CREDIT)
-        sharing the same {@code reference} form one double-entry transfer, so the ledger always
-        nets to zero across the pair and either can be traced back to the other. */
     public record LedgerEntry(String entryId, String accountId, BigDecimal amount, String direction,
                               BigDecimal balanceAfter, String reference, Instant postedAt) {
     }
@@ -101,7 +85,6 @@ public class BankingService {
         return accounts.get(accountId);
     }
 
-    /** All accounts owned by this user within their tenant — "my accounts". */
     public List<Account> accountsOf(String tenantId, String ownerUserId) {
         return accounts.values().stream()
                 .filter(a -> a.tenantId().equals(tenantId) && a.ownerUserId().equals(ownerUserId))
@@ -109,8 +92,6 @@ public class BankingService {
                 .toList();
     }
 
-    /** Admin/AML-scan use only — every account in a tenant, regardless of owner. Customer-facing
-        tools must never call this; they go through {@link #accountsOf} (owner-scoped). */
     public List<Account> allAccountsForTenant(String tenantId) {
         return accounts.values().stream()
                 .filter(a -> a.tenantId().equals(tenantId))
@@ -127,7 +108,6 @@ public class BankingService {
         return txns.getOrDefault(accountId, new CopyOnWriteArrayList<>());
     }
 
-    /** Find a transaction by id across all accounts (returns null if it doesn't exist). */
     public Transaction findTransaction(String transactionId) {
         return txns.values().stream()
                 .flatMap(List::stream)
@@ -147,7 +127,6 @@ public class BankingService {
         return cards.get(cardId);
     }
 
-    /** Protective action — immediate, reversible by staff, always audited by the caller. */
     public Card freezeCard(String cardId) {
         return cards.computeIfPresent(cardId, (k, c) ->
                 new Card(c.cardId(), c.accountId(), c.type(), c.network(), c.last4(), "FROZEN",
@@ -203,9 +182,9 @@ public class BankingService {
                         c.fraudFlag(), true, c.evidenceCount()));
     }
 
-    public Approval requestApproval(String subject, BigDecimal amount, String requestedBy) {
+    public Approval requestApproval(String tenantId, String subject, BigDecimal amount, String requestedBy) {
         String id = "APR-" + seq.incrementAndGet();
-        var a = new Approval(id, subject, amount, requestedBy, "PENDING_HUMAN_APPROVAL");
+        var a = new Approval(id, tenantId, subject, amount, requestedBy, "PENDING_HUMAN_APPROVAL");
         approvals.put(id, a);
         return a;
     }
@@ -214,26 +193,13 @@ public class BankingService {
         return approvals;
     }
 
-    // --- Ledger -------------------------------------------------------------------------
-
     public List<LedgerEntry> ledgerFor(String accountId) {
         return ledger.getOrDefault(accountId, new CopyOnWriteArrayList<>());
     }
 
-    /** Posts a real double-entry transfer between two accounts this bank holds — a DEBIT on
-        {@code fromAccountId} and a matching CREDIT on {@code toAccountId}, sharing one
-        reference, with the account balances updated from the SAME atomic operation that
-        posted the entries (never independently — a balance that could drift from its ledger
-        is exactly the bug double-entry bookkeeping exists to make impossible).
-        @throws IllegalStateException if the source account has insufficient funds. */
     public synchronized List<LedgerEntry> transfer(String fromAccountId, String toAccountId,
                                                     BigDecimal amount, String reference) {
-        // Defensive invariant at the domain layer, independent of whatever validation the
-        // calling tool did — the balance check below (`compareTo(amount) < 0`) only guards
-        // insufficient funds; a non-positive amount passes it trivially (2500 >= -100) and
-        // subtract(-100) CREDITS the source while debiting the destination, silently reversing
-        // the transfer's direction. The domain layer must never accept a non-positive amount
-        // regardless of caller, so this can never regress even if a future caller forgets to check.
+
         if (amount == null || amount.signum() <= 0) {
             throw new IllegalArgumentException("Transfer amount must be positive.");
         }
@@ -261,8 +227,6 @@ public class BankingService {
         ledger.computeIfAbsent(fromAccountId, k -> new CopyOnWriteArrayList<>()).add(debit);
         ledger.computeIfAbsent(toAccountId, k -> new CopyOnWriteArrayList<>()).add(credit);
 
-        // The transfer also shows up as ordinary transaction history on both accounts, the
-        // same as any other movement a customer would recognize in their statement.
         txns.computeIfAbsent(fromAccountId, k -> new CopyOnWriteArrayList<>())
                 .add(new Transaction(debit.entryId(), fromAccountId, LocalDate.now(), amount,
                         "Transfer to " + toAccountId, "DEBIT"));
@@ -272,8 +236,6 @@ public class BankingService {
 
         return List.of(debit, credit);
     }
-
-    // --- Customer profile (contact info, alert preferences, travel notices) -------------
 
     public CustomerProfile getProfile(String tenantId, String userId) {
         return profiles.get(tenantId + ":" + userId);

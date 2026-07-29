@@ -5,8 +5,6 @@ import { Search } from "lucide-react";
 import { fetchAuditQuery, type AuditEvent } from "@/lib/adminApi";
 import { EventsTable } from "./EventsTable";
 
-/** Compliance/forensics view over the PERSISTED audit table (survives restarts) — filterable
-    by tenant, unlike the live in-memory /events feed above it on the page. */
 export function AuditQueryPanel() {
   const [tenant, setTenant] = useState("");
   const [rows, setRows] = useState<AuditEvent[] | null>(null);

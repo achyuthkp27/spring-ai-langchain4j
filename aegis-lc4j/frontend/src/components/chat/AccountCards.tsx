@@ -13,8 +13,6 @@ const TYPE_STYLE: Record<AccountData["type"], { accent: string; icon: typeof Wal
 const money = (n: number) =>
   n.toLocaleString(undefined, { style: "currency", currency: "USD" });
 
-/** Renders the REAL account records pushed by listMyAccounts/lookupBalance (see
-    BankingTools.ACCOUNTS_KEY) as balance tiles instead of the model's bullet-list text. */
 export function AccountCards({ accounts }: { accounts: AccountData[] }) {
   if (accounts.length === 0) return null;
 

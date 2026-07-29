@@ -5,12 +5,6 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * Prompt-injection heuristic screen (OWASP LLM01). A fast, deterministic first
- * line: flags common override / exfiltration / role-manipulation patterns before
- * the request reaches the model. In production this is backed by a small local
- * classifier model; the heuristic keeps the CI gate deterministic.
- */
 @Component
 public class InjectionScreen {
 
@@ -22,9 +16,6 @@ public class InjectionScreen {
             "act as an unrestricted"
     );
 
-    // Regexes catch the paraphrase space the fixed strings miss: "IGNORE  your
-    // instructions", "please disregard prior rules", "output your hidden prompt", …
-    // Input is whitespace-normalized first, so spacing tricks don't evade matching.
     private static final List<java.util.regex.Pattern> SUSPICIOUS_PATTERNS = List.of(
             java.util.regex.Pattern.compile(
                 "\\b(ignore|disregard|forget|override|bypass)\\b.{0,30}\\b(instructions?|rules?|prompts?|guidelines?|guardrails?)\\b"),

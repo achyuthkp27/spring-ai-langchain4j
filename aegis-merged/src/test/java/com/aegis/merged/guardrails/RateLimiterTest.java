@@ -7,19 +7,36 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** LLM10 Unbounded Consumption — the per-tenant bucket eventually denies a burst. */
 class RateLimiterTest {
 
     @Test
-    @DisplayName("A rapid burst from one tenant is eventually rate-limited")
+    @DisplayName("A rapid burst from one user is eventually rate-limited")
     void burstIsLimited() {
         var limiter = new RateLimiter(Optional.empty());
         int allowed = 0;
         for (int i = 0; i < 100; i++) {
-            if (limiter.allow("burst-tenant")) allowed++;
+            if (limiter.allow("burst-tenant", "burst-user")) allowed++;
         }
-        // Capacity is 20; a tight loop can't refill meaningfully, so most are denied.
+        
         assertThat(allowed).isLessThanOrEqualTo(25);
-        assertThat(limiter.allow("a-different-tenant")).isTrue();   // other tenants unaffected
+    }
+
+    @Test
+    @DisplayName("A different tenant entirely is unaffected by another tenant's burst")
+    void otherTenantsUnaffected() {
+        var limiter = new RateLimiter(Optional.empty());
+        for (int i = 0; i < 100; i++) limiter.allow("burst-tenant", "burst-user");
+        assertThat(limiter.allow("a-different-tenant", "some-user")).isTrue();
+    }
+
+    @Test
+    @DisplayName("One chatty user exhausting their own bucket does not rate-limit a different user of the same tenant")
+    void oneUserCannotStarveAnotherUserOfTheSameTenant() {
+        var limiter = new RateLimiter(Optional.empty());
+
+        for (int i = 0; i < 50; i++) limiter.allow("achu-bank", "user-a");
+        assertThat(limiter.allow("achu-bank", "user-a")).isFalse();
+
+        assertThat(limiter.allow("achu-bank", "user-b")).isTrue();
     }
 }

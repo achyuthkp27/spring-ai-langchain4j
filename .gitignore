@@ -52,5 +52,13 @@ Thumbs.db
 .project
 .factorypath
 
+# Node / Next.js (aegis-lc4j/frontend) — CODE_REVIEW.md flagged compiled build output getting
+# tracked; neither is currently tracked, but nothing prevented it either.
+node_modules/
+.next/
+out/
+npm-debug.log*
+.env*.local
+
 # Custom directories
 .claude/

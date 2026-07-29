@@ -6,9 +6,6 @@ import clsx from "clsx";
 import { ChevronLeft, ChevronRight, Snowflake, Wifi } from "lucide-react";
 import type { CardData } from "@/lib/sse";
 
-// Purely a color/typography distinction — deliberately not a reproduction of either
-// network's actual logo/mark (trademark), just a different gradient + wordmark per network
-// so cards read as visually distinct at a glance.
 const NETWORK_STYLE: Record<CardData["network"], { gradient: string; ring: string }> = {
   VISA: { gradient: "from-[#1a2980] via-[#26428a] to-[#2563eb]", ring: "ring-blue-400/30" },
   MASTERCARD: { gradient: "from-[#2b1055] via-[#3a1c6e] to-[#4c1d95]", ring: "ring-violet-400/30" },
@@ -33,7 +30,7 @@ function CardFace({ card, index }: { card: CardData; index: number }) {
       )}
       style={{ perspective: 800 }}
     >
-      {/* Shine sweep — subtle, one pass, not looping (loop would be distracting in a chat) */}
+      {}
       <motion.div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"
@@ -49,7 +46,7 @@ function CardFace({ card, index }: { card: CardData; index: number }) {
         <Wifi size={16} className="rotate-90 text-white/70" />
       </div>
 
-      {/* Chip */}
+      {}
       <div className="mt-5 h-6 w-8 rounded-md bg-gradient-to-br from-yellow-200 to-yellow-500/80" />
 
       <p className="mt-4 font-mono text-[15px] tracking-[0.15em] text-white/95">
@@ -73,8 +70,6 @@ function CardFace({ card, index }: { card: CardData; index: number }) {
   );
 }
 
-/** Renders the REAL structured card data pushed by listCards/freezeCard (see BankingTools.CARDS_KEY
-    on the backend) as an actual card UI — not text parsed out of the model's reply. */
 export function CardCarousel({ cards }: { cards: CardData[] }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);

@@ -45,7 +45,7 @@ class StreamingFiltersTest {
         assertEquals(6, AssistantController.lastSafeBoundary("line1\nrest"));
         assertEquals(9, AssistantController.lastSafeBoundary("Done now. And then part"));
         assertEquals(-1, AssistantController.lastSafeBoundary("no boundary yet"));
-        // A '.' inside a number is not a sentence end.
+        
         assertEquals(-1, AssistantController.lastSafeBoundary("$2500.00"));
     }
 

@@ -1,7 +1,6 @@
 "use client";
 
 import clsx from "clsx";
-import type { AuditEvent } from "@/lib/adminApi";
 
 function sourceTone(source: string): "good" | "warning" | "critical" | "neutral" {
   if (source === "cache") return "good";
@@ -10,8 +9,6 @@ function sourceTone(source: string): "good" | "warning" | "critical" | "neutral"
   return "neutral";
 }
 
-/** Shared table for both the live in-memory /events feed and the persisted /audit/query
-    results — same shape, same status-tone convention as StatTile/TrafficChart. */
 export function EventsTable({
   rows,
   emptyLabel = "No events yet.",

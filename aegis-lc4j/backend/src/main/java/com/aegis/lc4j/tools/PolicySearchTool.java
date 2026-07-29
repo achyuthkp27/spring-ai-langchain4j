@@ -15,11 +15,6 @@ import org.slf4j.LoggerFactory;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-/**
- * Policy search for the assistant. The tenant is BAKED IN at construction from
- * the authenticated Principal — never a model-supplied argument. The model cannot
- * request another tenant's documents; the security boundary is not its to choose.
- */
 public class PolicySearchTool {
 
     private static final Logger log = LoggerFactory.getLogger(PolicySearchTool.class);
@@ -49,8 +44,7 @@ public class PolicySearchTool {
         statusSink.accept("Searching policy documents…");
 
         Embedding q = embeddingModel.embed(query).content();
-        // Typed metadata filter — tenantId comes from the verified JWT; never build
-        // filter expressions by string concatenation.
+
         var results = store.search(EmbeddingSearchRequest.builder()
                 .queryEmbedding(q)
                 .maxResults(6)

@@ -6,15 +6,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * Stand-in {@link KycProvider} so this app has a real, working code path to demo — NOT a
- * real identity check. It always returns PENDING, matching how a real bureau call would
- * actually behave from the caller's side (async review), so nothing downstream can
- * accidentally rely on synchronous VERIFIED behavior a real vendor wouldn't offer either.
- *
- * Replace this bean with a real vendor client (Persona/Alloy/Socure) when that contract
- * exists — {@link KycProvider} is the whole surface area anything else in the app depends on.
- */
 @Component
 public class MockKycProvider implements KycProvider {
 

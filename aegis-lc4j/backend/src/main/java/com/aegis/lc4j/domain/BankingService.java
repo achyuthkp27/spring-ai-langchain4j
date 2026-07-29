@@ -9,11 +9,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * In-memory banking domain stand-in so the assistant has real state to act on.
- * Accounts carry an ownerUserId: the customer-facing bot may only ever touch the
- * authenticated customer's own accounts (enforced inside the tools).
- */
 @Service
 public class BankingService {
 
@@ -71,7 +66,6 @@ public class BankingService {
         return accounts.get(accountId);
     }
 
-    /** All accounts owned by this user within their tenant — "my accounts". */
     public List<Account> accountsOf(String tenantId, String ownerUserId) {
         return accounts.values().stream()
                 .filter(a -> a.tenantId().equals(tenantId) && a.ownerUserId().equals(ownerUserId))
@@ -83,7 +77,6 @@ public class BankingService {
         return txns.getOrDefault(accountId, List.of());
     }
 
-    /** Find a transaction by id across all accounts (returns null if it doesn't exist). */
     public Transaction findTransaction(String transactionId) {
         return txns.values().stream()
                 .flatMap(List::stream)
@@ -103,7 +96,6 @@ public class BankingService {
         return cards.get(cardId);
     }
 
-    /** Protective action — immediate, reversible by staff, always audited by the caller. */
     public Card freezeCard(String cardId) {
         return cards.computeIfPresent(cardId, (k, c) ->
                 new Card(c.cardId(), c.accountId(), c.type(), c.last4(), "FROZEN"));

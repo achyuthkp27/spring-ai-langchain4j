@@ -7,10 +7,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
-/**
- * DEV-ONLY token issuer. In production this is your external IdP; the app only
- * ever validates tokens. Default identity = the demo customer.
- */
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {

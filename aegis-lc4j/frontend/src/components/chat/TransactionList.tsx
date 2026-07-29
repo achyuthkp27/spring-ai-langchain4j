@@ -10,8 +10,6 @@ const money = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
-/** Renders the REAL transaction records pushed by searchTransactions (see
-    BankingTools.TRANSACTIONS_KEY) as a proper list instead of the model's bullet text. */
 export function TransactionList({ transactions }: { transactions: TransactionData[] }) {
   if (transactions.length === 0) return null;
 

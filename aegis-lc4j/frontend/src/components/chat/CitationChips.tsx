@@ -4,9 +4,6 @@ import { motion } from "framer-motion";
 import { FileText } from "lucide-react";
 import type { CitationData } from "@/lib/sse";
 
-/** Renders the REAL cited policy passages pushed by searchPolicies (see
-    BankingTools.CITATIONS_KEY) as small source chips instead of leaving citations buried
-    in the model's prose. Hover a chip for the actual snippet it was grounded in. */
 export function CitationChips({ citations }: { citations: CitationData[] }) {
   if (citations.length === 0) return null;
 

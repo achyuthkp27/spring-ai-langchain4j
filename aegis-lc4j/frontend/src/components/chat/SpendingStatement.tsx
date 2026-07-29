@@ -7,8 +7,6 @@ import type { StatementData } from "@/lib/sse";
 const money = (n: number) =>
   n.toLocaleString(undefined, { style: "currency", currency: "USD" });
 
-// Fixed categorical order (dataviz skill: assign hue by fixed order, never cycled) —
-// matches BankingTools.categoryOf's exact heuristic buckets, plus a catch-all.
 const CATEGORY_ORDER = ["Shopping", "Subscriptions", "Cash & ATM", "Transfers", "Interest", "Other"];
 const CATEGORY_TINT: Record<string, string> = {
   Shopping: "bg-accent",
@@ -19,8 +17,6 @@ const CATEGORY_TINT: Record<string, string> = {
   Other: "bg-muted",
 };
 
-/** Renders the REAL per-category totals pushed by getSpendingSummary (see
-    BankingTools.STATEMENT_KEY) as a proportional bar breakdown instead of prose. */
 export function SpendingStatement({ statement }: { statement: StatementData }) {
   const entries = Object.entries(statement.byCategory).sort(
     (a, b) => CATEGORY_ORDER.indexOf(a[0]) - CATEGORY_ORDER.indexOf(b[0]),
@@ -42,7 +38,7 @@ export function SpendingStatement({ statement }: { statement: StatementData }) {
         </span>
       </div>
 
-      {/* Proportional stacked bar — 2px surface gaps between segments per dataviz mark spec. */}
+      {}
       <div className="mt-2.5 flex h-2 gap-0.5 overflow-hidden rounded-full">
         {entries.map(([cat, amt]) => (
           <div

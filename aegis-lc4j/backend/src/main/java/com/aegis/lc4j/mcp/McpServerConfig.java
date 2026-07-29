@@ -20,12 +20,6 @@ import org.springframework.web.servlet.function.ServerResponse;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * MCP server (official Java SDK, SSE transport at /sse + /mcp/message) exposing a
- * READ-ONLY policy search tool to external agents (e.g. Claude Desktop). Unlike the
- * in-app PolicySearchTool, tenantId here is an explicit parameter — this transport
- * is unauthenticated in the POC, so it exposes nothing customer-specific.
- */
 @Configuration
 public class McpServerConfig {
 

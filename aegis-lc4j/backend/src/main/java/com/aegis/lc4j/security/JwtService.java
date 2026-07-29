@@ -12,10 +12,6 @@ import java.util.Date;
 import java.util.List;
 import java.util.Set;
 
-/**
- * Mints and validates signed JWTs (HS256). tenant/role/user are SIGNED claims.
- * (A real deployment uses an external IdP; the validation side is identical.)
- */
 @Service
 public class JwtService {
 
@@ -40,7 +36,6 @@ public class JwtService {
                 .compact();
     }
 
-    /** Validates signature + expiry and returns the Principal, or throws. */
     public Principal parse(String token) {
         Claims c = Jwts.parser().verifyWith(key).build()
                 .parseSignedClaims(token).getPayload();
@@ -50,11 +45,10 @@ public class JwtService {
 
     public static Set<String> permissionsFor(String role) {
         return switch (role == null ? "" : role) {
-            // Self-service customer: can read own accounts, dispute own transactions,
-            // manage own cards, and request (not approve) provisional credit.
+
             case "customer" -> Set.of("account:read", "cases:create", "credit:request", "cards:manage");
             case "read-only" -> Set.of("account:read");
-            // Operator of the bot: audit/analytics + admin actions, not money-adjacent perms.
+            
             case "admin" -> Set.of("account:read", "admin:all");
             default -> Set.of();
         };

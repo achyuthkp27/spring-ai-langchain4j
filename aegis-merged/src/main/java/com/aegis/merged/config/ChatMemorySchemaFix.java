@@ -7,15 +7,6 @@ import org.springframework.context.event.EventListener;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-/**
- * Widens the Spring AI chat-memory conversation_id column.
- *
- * Spring AI's default JDBC schema sizes conversation_id as varchar(36) — it assumes a
- * UUID. But we key memory by "tenantId:userId:conversationId", which overflows 36 chars
- * as soon as identifiers are realistic (an email userId, a real tenant name). When the
- * insert failed, the whole model call failed and — under repetition — tripped the circuit
- * breaker. Widening the column removes the constraint. Runs once at startup, idempotent.
- */
 @Component
 public class ChatMemorySchemaFix {
 
@@ -27,7 +18,7 @@ public class ChatMemorySchemaFix {
         this.jdbc = jdbc;
     }
 
-    @EventListener(ApplicationReadyEvent.class)   // after Spring AI has created the table
+    @EventListener(ApplicationReadyEvent.class)   
     public void widenConversationId() {
         try {
             jdbc.execute("ALTER TABLE SPRING_AI_CHAT_MEMORY "

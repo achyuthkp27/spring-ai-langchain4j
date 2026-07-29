@@ -11,10 +11,6 @@ export interface Profile {
   role: string;
 }
 
-// One persisted widget event attached to a historical assistant message — payload's shape
-// depends on `type` ("cards" | "accounts" | "transactions" | "case" | "approval" | "citations"),
-// mirroring the live SSE event of the same name. See WidgetHistoryStore (aegis-merged) for
-// why this exists: without it, a page reload would silently lose every rich widget.
 export interface HistoryWidgetEvent {
   type: string;
   payload: unknown;
@@ -36,6 +32,17 @@ interface CachedSession {
   role: string;
 }
 
+function decodeJwtExpMs(token: string): number | null {
+  try {
+    const payload = token.split(".")[1];
+    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+    const claims = JSON.parse(json) as { exp?: number };
+    return typeof claims.exp === "number" ? claims.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
 function readCache(): CachedSession | null {
   if (typeof window === "undefined") return null;
   try {
@@ -49,9 +56,15 @@ function readCache(): CachedSession | null {
   }
 }
 
+function clearCache() {
+  if (typeof window === "undefined") return;
+  sessionStorage.removeItem(TOKEN_KEY);
+}
+
 function writeCache(data: TokenResponse) {
   if (typeof window === "undefined") return;
-  const session: CachedSession = { ...data, exp: Date.now() + 55 * 60_000 };
+  const exp = decodeJwtExpMs(data.token) ?? Date.now() + 55 * 60_000;
+  const session: CachedSession = { ...data, exp };
   sessionStorage.setItem(TOKEN_KEY, JSON.stringify(session));
 }
 
@@ -73,7 +86,6 @@ export async function getToken(): Promise<string> {
   return data.token;
 }
 
-/** Current identity (userId/tenantId/role), minting a demo token if none is cached yet. */
 export async function getProfile(): Promise<Profile> {
   const cached = readCache();
   if (cached) return { userId: cached.userId, tenantId: cached.tenantId, role: cached.role };
@@ -82,21 +94,37 @@ export async function getProfile(): Promise<Profile> {
   return { userId: data.userId, tenantId: data.tenantId, role: data.role };
 }
 
-/** Switch to a different demo identity (tenant/user) — mints a fresh token and reloads so
-    every component picks up the new session cleanly instead of trying to reconcile stale
-    per-tenant local state (conversations, cached messages) in place. */
 export async function switchIdentity(tenantId: string, userId: string): Promise<void> {
   const data = await mintToken({ tenantId, userId, role: "customer" });
   writeCache(data);
   if (typeof window !== "undefined") window.location.reload();
 }
 
-export async function fetchHistory(conversationId: string): Promise<HistoryMessage[]> {
+async function authFetch(url: string, init: RequestInit = {}): Promise<Response> {
   const token = await getToken();
-  const res = await fetch(
-    `/api/assistant/history?conversationId=${encodeURIComponent(conversationId)}`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
+  const res = await fetch(url, {
+    ...init,
+    headers: { ...init.headers, Authorization: `Bearer ${token}` },
+  });
+  if (res.status !== 401) return res;
+
+  clearCache();
+  const freshToken = await getToken();
+  return fetch(url, {
+    ...init,
+    headers: { ...init.headers, Authorization: `Bearer ${freshToken}` },
+  });
+}
+
+export async function fetchHistory(conversationId: string): Promise<HistoryMessage[]> {
+  const res = await authFetch(`/api/assistant/history?conversationId=${encodeURIComponent(conversationId)}`);
   if (!res.ok) throw new Error(`history fetch failed: ${res.status}`);
   return (await res.json()) as HistoryMessage[];
+}
+
+export async function deleteConversation(conversationId: string): Promise<void> {
+  const res = await authFetch(`/api/assistant/history?conversationId=${encodeURIComponent(conversationId)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error(`delete conversation failed: ${res.status}`);
 }

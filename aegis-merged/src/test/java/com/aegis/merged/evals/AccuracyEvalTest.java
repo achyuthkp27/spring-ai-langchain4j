@@ -23,16 +23,6 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Golden-fact ACCURACY gate — distinct from performance. It asserts the assistant's
- * ANSWERS contain the correct known values (120 days, $5,000, …) and that off-domain
- * requests are blocked. A retrieval/prompt/model regression that changes a fact fails
- * the build. Graded by deterministic fact-presence, not an LLM judge, so it's stable.
- *
- * Gated behind RUN_EVAL_TESTS=true — it needs a live model (Ollama) + Postgres, so a
- * plain {@code mvn test} skips it; run it in a CI stage that has a model, or locally with
- * {@code RUN_EVAL_TESTS=true ./mvnw test -Dtest=AccuracyEvalTest}.
- */
 @SpringBootTest(properties = {
         "spring.docker.compose.enabled=false",
         "spring.datasource.url=jdbc:postgresql://localhost:5432/aegis",
@@ -47,7 +37,6 @@ class AccuracyEvalTest {
     @Autowired AssistantController assistant;
     @Autowired IngestionService ingestion;
 
-    /** One golden case: a question, the facts the answer MUST contain, and whether it must be scope-blocked. */
     private record Golden(String question, List<String> mustContain, boolean mustBlock) {}
 
     private static final List<Golden> GOLDEN = List.of(
@@ -61,8 +50,8 @@ class AccuracyEvalTest {
 
     @BeforeEach
     void setUp() {
-        ingestion.ingestAll();   // populate the vector store so RAG is grounded
-        // Authenticate a disputes-analyst so the controller's CurrentUser.get() succeeds.
+        ingestion.ingestAll();   
+        
         var principal = new Principal("eval-user", TENANT, JwtService.permissionsFor("disputes-analyst"));
         var authorities = AuthorityUtils.createAuthorityList(
                 principal.permissions().stream().map(p -> "PERM_" + p).toArray(String[]::new));
@@ -97,13 +86,12 @@ class AccuracyEvalTest {
 
     private final ObjectMapper json = new ObjectMapper();
 
-    /** The assistant now exposes ONE streaming API: drain it and read the terminal meta event. */
     private ChatReply ask(ChatRequest request) {
         var events = assistant.stream(request).collectList().block(Duration.ofMinutes(3));
         assertThat(events).as("SSE events for: " + request.message()).isNotNull();
         return events.stream()
                 .filter(ev -> "meta".equals(ev.event()))
-                .reduce((first, second) -> second)   // terminal meta wins
+                .reduce((first, second) -> second)   
                 .map(ev -> {
                     try {
                         return json.readValue(ev.data(), ChatReply.class);

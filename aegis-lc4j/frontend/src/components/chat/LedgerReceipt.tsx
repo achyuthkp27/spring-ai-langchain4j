@@ -8,9 +8,6 @@ import type { LedgerEntryData } from "@/lib/sse";
 const money = (n: number) =>
   n.toLocaleString(undefined, { style: "currency", currency: "USD" });
 
-/** Renders the REAL double-entry posting pushed by transferBetweenOwnAccounts (see
-    BankingTools.LEDGER_KEY) — the matched debit/credit pair from BankingService.transfer,
-    not a summary sentence the model composed. */
 export function LedgerReceipt({ entries }: { entries: LedgerEntryData[] }) {
   if (entries.length === 0) return null;
   const debit = entries.find((e) => e.direction === "DEBIT");

@@ -11,25 +11,11 @@ import jakarta.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * Persists the structured widget payloads (cards, accounts, transactions, a dispute case,
- * an approval, policy citations) that {@code AssistantController} pushes as SSE side-channel
- * events during a live turn — without this, that data only ever existed for the duration of
- * the streaming response, so reloading the page reconstructed messages from
- * {@code spring_ai_chat_memory} (text only) and every widget silently vanished.
- *
- * Rows are tagged with {@code turnSeq} — the 1-indexed ordinal of the assistant reply within
- * its conversation, computed once at the start of {@code AssistantController.stream()} from
- * the PRIOR message count — so {@code GET /history} can re-attach each turn's widget events
- * to the matching assistant message without needing any change to Spring AI's own chat-memory
- * schema. Multiple emissions of the same widget type within one turn (e.g. listCards then
- * freezeCard both firing in the same turn) are stored as SEPARATE rows, in order, so history
- * replay can reuse the exact same merge-by-id logic the live SSE stream already uses on the
- * frontend — deduping here would risk dropping cards/accounts/transactions the live view
- * never dropped.
- */
 @Component
 public class WidgetHistoryStore {
 
@@ -39,11 +25,22 @@ public class WidgetHistoryStore {
     }
 
     private final JdbcTemplate jdbc;
-    private final ExecutorService persistExecutor = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "widget-history-persist");
-        t.setDaemon(true);
-        return t;
-    });
+
+    private static final int MAX_QUEUED_WRITES = 10_000;
+    private final AtomicLong droppedWrites = new AtomicLong();
+    private final ExecutorService persistExecutor = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
+            new LinkedBlockingQueue<>(MAX_QUEUED_WRITES),
+            r -> {
+                Thread t = new Thread(r, "widget-history-persist");
+                t.setDaemon(true);
+                return t;
+            },
+            (r, executor) -> {
+                long total = droppedWrites.incrementAndGet();
+                if (total == 1 || total % 1000 == 0) {
+                    log.warn("widget-history.persist.queue_full dropping write (totalDropped={})", total);
+                }
+            });
 
     public WidgetHistoryStore(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
@@ -66,17 +63,48 @@ public class WidgetHistoryStore {
                     CREATE INDEX IF NOT EXISTS idx_widget_event_conversation
                         ON assistant_widget_event (conversation_id)
                     """);
+
+            jdbc.execute("""
+                    CREATE TABLE IF NOT EXISTS assistant_turn_counter (
+                        conversation_id VARCHAR(256) PRIMARY KEY,
+                        next_turn_seq INT NOT NULL DEFAULT 0
+                    )
+                    """);
         } catch (Exception e) {
             log.warn("widget-history.schema.create skipped: {}", e.getMessage());
         }
     }
 
+    public int nextTurnSeq(String conversationId) {
+        return jdbc.queryForObject("""
+                INSERT INTO assistant_turn_counter (conversation_id, next_turn_seq)
+                VALUES (?, 1)
+                ON CONFLICT (conversation_id)
+                DO UPDATE SET next_turn_seq = assistant_turn_counter.next_turn_seq + 1
+                RETURNING next_turn_seq
+                """, Integer.class, conversationId);
+    }
+
+    public int currentTurnSeq(String conversationId) {
+        List<Integer> rows = jdbc.query(
+                "SELECT next_turn_seq FROM assistant_turn_counter WHERE conversation_id = ?",
+                (rs, i) -> rs.getInt("next_turn_seq"), conversationId);
+        return rows.isEmpty() ? 0 : rows.get(0);
+    }
+
     @PreDestroy
     public void shutdown() {
         persistExecutor.shutdown();
+        try {
+            if (!persistExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                persistExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            persistExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 
-    /** Fire-and-forget: never adds latency to the streaming response path. */
     public void save(String conversationId, int turnSeq, String widgetType, String payloadJson) {
         persistExecutor.submit(() -> {
             try {
@@ -90,7 +118,6 @@ public class WidgetHistoryStore {
         });
     }
 
-    /** Every widget row for a conversation, in insertion order — callers group by turnSeq. */
     public List<WidgetRow> loadForConversation(String conversationId) {
         List<WidgetRow> out = new ArrayList<>();
         jdbc.query("""
@@ -100,5 +127,10 @@ public class WidgetHistoryStore {
                     out.add(new WidgetRow(rs.getInt("turn_seq"), rs.getString("widget_type"), rs.getString("payload")));
                 }, conversationId);
         return out;
+    }
+
+    public void deleteConversation(String conversationId) {
+        jdbc.update("DELETE FROM assistant_widget_event WHERE conversation_id = ?", conversationId);
+        jdbc.update("DELETE FROM assistant_turn_counter WHERE conversation_id = ?", conversationId);
     }
 }

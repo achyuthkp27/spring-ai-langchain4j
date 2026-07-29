@@ -18,16 +18,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * The escalation tier of {@link ModelRouter}'s cascade: an explicit, second ChatClient bean
- * independent of whichever provider {@code spring.ai.model.chat} auto-selected — the same
- * "build it explicitly, don't rely on the one auto-configured bean" approach
- * {@link com.aegis.merged.config.CacheConfig} uses for the semantic-cache embedding model.
- *
- * Absent (aegis.router.enabled=false, or a misconfigured provider), no bean is registered here
- * and {@link com.aegis.merged.assistant.AssistantController} falls back to the primary
- * assistant client for every request — escalation is strictly additive.
- */
 @Configuration
 @ConditionalOnProperty(prefix = "aegis.router", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class RouterConfig {
@@ -43,7 +33,8 @@ public class RouterConfig {
             ChatMemory chatMemory, TokenAuditAdvisor tokenAudit, GuardrailAdvisor guardrails) {
 
         OllamaApi api = OllamaApi.builder().baseUrl(baseUrl).build();
-        var options = OllamaChatOptions.builder().model(model);
+
+        var options = OllamaChatOptions.builder().model(model).numCtx(16384).numPredict(512);
         if (!think.isBlank()) {
             options.thinkOption(new ThinkOption.ThinkBoolean(Boolean.parseBoolean(think)));
         }
@@ -51,10 +42,7 @@ public class RouterConfig {
                 .ollamaApi(api)
                 .defaultOptions(options.build())
                 .build();
-        // Same advisor chain as the primary assistantClient (AssistantConfig) — a bug fixed
-        // after a live escalation lost the whole conversation ("this is our first message")
-        // because this bean never had MessageChatMemoryAdvisor wired in: escalating to the
-        // bigger model isn't supposed to also silently drop history, guardrails, and audit.
+
         return ChatClient.builder(chatModel)
                 .defaultSystem(AssistantConfig.ASSISTANT_SYSTEM_PROMPT)
                 .defaultAdvisors(tokenAudit, guardrails, MessageChatMemoryAdvisor.builder(chatMemory).build())

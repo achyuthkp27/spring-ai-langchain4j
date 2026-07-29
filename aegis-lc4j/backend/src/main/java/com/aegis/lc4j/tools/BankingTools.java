@@ -13,17 +13,6 @@ import java.math.BigDecimal;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
-/**
- * Tools the customer assistant can call. Security invariants, all enforced in
- * code (not by prompt):
- *   1. The Principal is a CONSTRUCTOR field — one BankingTools instance is built
- *      per request with the verified identity baked in. The model never sees or
- *      supplies identity; there is no tenant/user tool parameter to abuse.
- *   2. Authorization AND ownership are checked INSIDE every tool: a customer can
- *      only touch accounts they own. Excessive agency (OWASP LLM06) is
- *      structurally impossible — money movement only ever creates a
- *      PENDING_HUMAN_APPROVAL request.
- */
 public class BankingTools {
 
     private static final Logger log = LoggerFactory.getLogger(BankingTools.class);
@@ -31,9 +20,9 @@ public class BankingTools {
     private final BankingService banking;
     private final AuditTrail audit;
     private final Principal principal;
-    /** Flipped true whenever any account/action tool runs → the answer is never cached. */
+    
     private final AtomicBoolean dynamicAccess;
-    /** Human-readable progress lines egress immediately as SSE status events. */
+    
     private final Consumer<String> statusSink;
 
     public BankingTools(BankingService banking, AuditTrail audit, Principal principal,
@@ -61,7 +50,6 @@ public class BankingTools {
         }
     }
 
-    /** Account must exist, be in the caller's tenant AND be owned by the caller. */
     private BankingService.Account ownedAccount(String accountId) {
         var acct = banking.getAccount(accountId);
         if (acct == null) return null;
@@ -126,8 +114,7 @@ public class BankingTools {
         require("cases:create");
         audit.toolCalled("createDisputeCase", principal.tenantId());
         status("Opening a dispute case for " + transactionId + "…");
-        // Validate the transaction exists AND is on an account the caller owns BEFORE
-        // creating a case — never open a dispute against a foreign transaction id.
+
         var txn = banking.findTransaction(transactionId);
         if (txn == null) {
             log.warn("tool.createDisputeCase.reject user={} reason=txn_not_found txn={}",
@@ -195,7 +182,7 @@ public class BankingTools {
         if (ownedAccount(card.accountId()) == null) {
             throw new AccessDeniedException("That card is not on one of your accounts.");
         }
-        // Standard replacement fee per card-services policy; waivable by the approver.
+        
         var approval = banking.requestApproval("CARD-REPLACEMENT:" + cardId,
                 new BigDecimal("5.00"), principal.userId());
         log.info("tool.requestCardReplacement user={} card={} approval={}",
@@ -234,7 +221,7 @@ public class BankingTools {
         if (ownedAccount(c.accountId()) == null) {
             throw new AccessDeniedException("That case is not on one of your accounts.");
         }
-        // Human-in-the-loop: the model can REQUEST money movement, never EXECUTE it.
+        
         var approval = banking.requestApproval(caseId, new BigDecimal(amount), principal.userId());
         log.info("tool.requestProvisionalCredit user={} case={} amount={} -> {} (approval {})",
                 principal.userId(), caseId, amount, approval.status(), approval.approvalId());

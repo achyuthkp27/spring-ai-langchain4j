@@ -13,11 +13,6 @@ import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
-/**
- * First guardrail of the Achu FinBot advisor chain: audits every LLM call with
- * latency and token usage. Grows into the full Phase 4 pipeline
- * (PII redaction, injection screening, budget enforcement, audit trail).
- */
 @Component
 public class TokenAuditAdvisor implements CallAdvisor, StreamAdvisor {
 
@@ -44,7 +39,7 @@ public class TokenAuditAdvisor implements CallAdvisor, StreamAdvisor {
             log.info("ai.call model={} tenant={} elapsedMs={} promptTokens={} completionTokens={} totalTokens={}",
                     model, tenant, elapsedMs,
                     usage.getPromptTokens(), usage.getCompletionTokens(), usage.getTotalTokens());
-            // FinOps: token usage is money. Counter tagged by tenant + model.
+            
             meterRegistry.counter("aegis.ai.tokens.total", "tenant", tenant, "model", safe(model))
                     .increment(usage.getTotalTokens());
             meterRegistry.counter("aegis.ai.calls.total", "tenant", tenant, "model", safe(model))
@@ -58,9 +53,7 @@ public class TokenAuditAdvisor implements CallAdvisor, StreamAdvisor {
     @Override
     public Flux<ChatClientResponse> adviseStream(ChatClientRequest request, StreamAdvisorChain chain) {
         long start = System.nanoTime();
-        // Usage metadata arrives on the FINAL streamed chunk (Ollama's eval counts) —
-        // keep the last non-empty one so the stream path feeds the same FinOps
-        // counters as the blocking path used to.
+
         var lastUsage = new java.util.concurrent.atomic.AtomicReference<Usage>();
         var model = new java.util.concurrent.atomic.AtomicReference<>("unknown");
         return chain.nextStream(request)

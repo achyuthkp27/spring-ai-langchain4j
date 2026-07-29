@@ -7,10 +7,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * pgvector store for policy chunks. Same Postgres instance as chat memory
- * (pgvector/pgvector:pg16 from compose.yaml). 768 dims = nomic-embed-text.
- */
 @Configuration
 public class RetrievalConfig {
 
@@ -19,7 +15,7 @@ public class RetrievalConfig {
             @Value("${spring.datasource.url}") String jdbcUrl,
             @Value("${spring.datasource.username}") String user,
             @Value("${spring.datasource.password}") String password) {
-        // jdbc:postgresql://host:port/db → host/port/db
+        
         var uri = java.net.URI.create(jdbcUrl.substring("jdbc:".length()));
         String database = uri.getPath().replaceFirst("/", "");
         return PgVectorEmbeddingStore.builder()
@@ -31,7 +27,7 @@ public class RetrievalConfig {
                 .table("policy_embeddings")
                 .dimension(768)
                 .createTable(true)
-                .useIndex(true)          // HNSW-style ivfflat index for cosine search
+                .useIndex(true)          
                 .indexListSize(100)
                 .build();
     }

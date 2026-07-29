@@ -25,7 +25,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Apply saved theme before paint to avoid a flash */}
+        {}
         <script
           dangerouslySetInnerHTML={{
             __html: `try{const t=localStorage.getItem('aegis.theme');const d=t?t==='dark':matchMedia('(prefers-color-scheme: dark)').matches;if(d)document.documentElement.classList.add('dark');}catch(e){}`,

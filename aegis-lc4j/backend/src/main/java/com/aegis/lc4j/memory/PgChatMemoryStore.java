@@ -9,12 +9,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
-/**
- * Postgres-backed ChatMemoryStore. Messages are serialized with LangChain4j's
- * canonical JSON format. memory_id is the composite `tenantId:userId:conversationId`
- * key, so isolation is structural: a user can only ever address their own rows
- * because the prefix comes from the verified JWT, never from the client.
- */
 @Component
 public class PgChatMemoryStore implements ChatMemoryStore {
 

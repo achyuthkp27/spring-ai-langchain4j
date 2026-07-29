@@ -12,71 +12,41 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 
-/**
- * Tools the customer assistant can call. Security invariants, all enforced in
- * code (not by prompt):
- *   1. The Principal flows via ToolContext — the model never sees or sets it.
- *   2. Authorization AND ownership are checked INSIDE every tool: a customer can
- *      only touch accounts they own (tenant AND ownerUserId — backported from the
- *      LangChain4j build, which tightened the original tenant-only check).
- *   3. Money movement only ever creates a PENDING_HUMAN_APPROVAL request
- *      (OWASP LLM06: excessive agency is structurally impossible).
- */
 @Component
 public class BankingTools {
 
     private static final Logger log = LoggerFactory.getLogger(BankingTools.class);
     public static final String PRINCIPAL_KEY = "principal";
-    /** A caller can pass an AtomicBoolean here; it's flipped true whenever any
-        account/action tool runs, so those (dynamic) answers are never cached. */
+    
     public static final String DYNAMIC_ACCESS_KEY = "dynamicAccess";
-    /** Optional Consumer&lt;String&gt;: tools report human-readable progress that the
-        streaming endpoint forwards as SSE status events. */
+    
     public static final String STATUS_KEY = "statusSink";
-    /** A caller can pass an AtomicBoolean here; tools flip it true whenever a lookup comes
-        back empty/not-found, so the router can escalate the NEXT turn even if the model's
-        own phrasing of that failure happens to dodge {@link com.aegis.merged.assistant.AnswerConfidence}. */
+    
     public static final String TOOL_FAILED_KEY = "toolFailed";
-    /** A caller can pass an AtomicBoolean here; tools flip it true whenever they actually
-        change state (freeze/unfreeze a card, post a transfer, file a case, update a profile —
-        anything beyond a read). AssistantController uses this to refuse to retry a
-        truncated-looking answer once a real mutation already ran this turn: a blind retry
-        would replay the same tool call and could freeze/transfer/file the same thing twice. */
+    
     public static final String MUTATED_KEY = "mutated";
-    /** Optional Consumer&lt;List&lt;Card&gt;&gt;: listCards pushes the STRUCTURED card data here
-        so the frontend can render a real card UI (network branding, masked number, status)
-        instead of parsing it back out of the model's prose — the model still narrates in
-        text, but the actual data for the widget comes straight from the tool, not the LLM. */
+    
     public static final String CARDS_KEY = "cardsSink";
-    /** Same pattern as CARDS_KEY, for account balance tiles. */
+    
     public static final String ACCOUNTS_KEY = "accountsSink";
-    /** Same pattern as CARDS_KEY, for the transaction list widget. */
+    
     public static final String TRANSACTIONS_KEY = "transactionsSink";
-    /** Same pattern as CARDS_KEY, for the dispute-case status card. */
+    
     public static final String CASES_KEY = "casesSink";
-    /** Same pattern as CARDS_KEY, for the approval-receipt card (card replacement fee,
-        provisional credit) — both create a PENDING_HUMAN_APPROVAL request, never move
-        money directly. */
+    
     public static final String APPROVALS_KEY = "approvalsSink";
-    /** Same pattern as CARDS_KEY, for policy-answer citation chips. */
+    
     public static final String CITATIONS_KEY = "citationsSink";
-    /** Same pattern as CARDS_KEY, for a transfer receipt (the two LedgerEntry rows it posted). */
+    
     public static final String LEDGER_KEY = "ledgerSink";
-    /** Same pattern as CARDS_KEY, for the customer profile widget (contact info, alert
-        preferences, travel notice). */
+    
     public static final String PROFILE_KEY = "profileSink";
-    /** Same pattern as CARDS_KEY, for the spending-summary/statement widget. */
+    
     public static final String STATEMENT_KEY = "statementSink";
 
-    /** One cited policy passage — source document + a short snippet, pushed by
-        PolicySearchTool alongside the model's prose answer. */
     public record Citation(String source, String snippet) {
     }
 
-    /** A lightweight category breakdown derived from transaction merchant names — not a
-        fabricated fact, a computed aggregation of real transaction data the customer already
-        owns. Real categorization in production comes from the card network's MCC codes, not
-        merchant-name keyword matching. */
     public record SpendingSummary(String accountId, java.util.Map<String, java.math.BigDecimal> byCategory,
                                   java.math.BigDecimal totalDebits, java.math.BigDecimal totalCredits) {
     }
@@ -163,25 +133,41 @@ public class BankingTools {
         }
     }
 
-    /** No documented daily/per-transfer limit exists elsewhere in this demo, so this is a
-        conservative placeholder — a real deployment sets this per product/risk policy, not
-        as a single hardcoded constant. */
     private static final BigDecimal MAX_SELF_TRANSFER = new BigDecimal("25000.00");
+
+    static final String CONFIRMATION_TOKEN_PARAM_DESC =
+            "Leave empty the first time. You'll get back a short confirmationToken code (like "
+            + "\"K3F9QZ2R\") in a CONFIRMATION_REQUIRED reply — remember that code. After the "
+            + "customer says yes, call this SAME tool again with this parameter set to that "
+            + "exact code copied from the earlier reply. Do not leave it empty on that second call.";
+
+    private static final java.util.Set<String> MERCHANT_CATEGORIES = java.util.Set.of(
+            "GAMBLING", "INTERNATIONAL", "ONLINE", "ATM_CASH_ADVANCE", "ADULT_ENTERTAINMENT");
+
+    private static final java.util.regex.Pattern EMAIL_PATTERN =
+            java.util.regex.Pattern.compile("^[\\w.+-]+@[\\w-]+\\.[\\w.-]+$");
+
+    private static final java.util.regex.Pattern PHONE_PATTERN =
+            java.util.regex.Pattern.compile("^\\+?[0-9()\\-. ]{7,20}$");
+    private static final int MAX_NICKNAME_LENGTH = 40;
+
+    private static final int MAX_TRAVEL_NOTICE_DAYS_AHEAD = 366;
 
     private final BankingService banking;
     private final com.aegis.merged.admin.AuditTrail audit;
     private final com.aegis.merged.kyc.KycProvider kyc;
+    private final ConfirmationGuard confirmationGuard;
 
     public BankingTools(BankingService banking, com.aegis.merged.admin.AuditTrail audit,
-                        com.aegis.merged.kyc.KycProvider kyc) {
+                        com.aegis.merged.kyc.KycProvider kyc, ConfirmationGuard confirmationGuard) {
         this.banking = banking;
         this.audit = audit;
         this.kyc = kyc;
+        this.confirmationGuard = confirmationGuard;
     }
 
     private Principal principal(ToolContext ctx) {
-        // Any banking tool touching account/action data marks the request dynamic,
-        // so the assistant will not cache its answer (balances change, are per-user).
+
         if (ctx.getContext().get(DYNAMIC_ACCESS_KEY) instanceof java.util.concurrent.atomic.AtomicBoolean b) {
             b.set(true);
         }
@@ -200,7 +186,6 @@ public class BankingTools {
         }
     }
 
-    /** Account must exist, be in the caller's tenant AND be owned by the caller. */
     private BankingService.Account ownedAccount(Principal p, String accountId) {
         var acct = banking.getAccount(accountId);
         if (acct == null) return null;
@@ -264,16 +249,11 @@ public class BankingTools {
             + "transaction must exist on one of their accounts; if it doesn't, this fails.")
     public String createDisputeCase(@ToolParam(description = "transaction id, e.g. TXN-5001") String transactionId,
                                     @ToolParam(description = "reason for the dispute") String reason,
-                                    @ToolParam(description = "true ONLY if the customer has already explicitly "
-                                            + "confirmed THIS EXACT dispute (transaction + reason) earlier in this "
-                                            + "conversation, e.g. said \"yes\" after you described it back to them; "
-                                            + "false or omitted on the first attempt") Boolean confirmed,
+                                    @ToolParam(description = CONFIRMATION_TOKEN_PARAM_DESC) String confirmationToken,
                                     ToolContext ctx) {
         var p = principal(ctx);
         require(p, "cases:create");
 
-        // Validate the transaction exists AND is on an account the caller owns BEFORE
-        // describing or creating a case — never confirm or dispute a foreign transaction id.
         var txn = banking.findTransaction(transactionId);
         if (txn == null) {
             log.warn("tool.createDisputeCase.reject user={} reason=txn_not_found txn={}", p.userId(), transactionId);
@@ -285,10 +265,12 @@ public class BankingTools {
             throw new AccessDeniedException("That transaction is not on one of your accounts.");
         }
 
-        if (!Boolean.TRUE.equals(confirmed)) {
+        if (!confirmationGuard.verify(confirmationToken, p.userId(), "createDisputeCase", transactionId, reason)) {
+            String token = confirmationGuard.issue(p.userId(), "createDisputeCase", transactionId, reason);
             audit.toolCalled("createDisputeCase:pending-confirmation", p.tenantId());
-            return "CONFIRMATION_REQUIRED: describe this back to the customer in your own words and ask them to "
-                    + "confirm before calling this tool again with confirmed=true — Open a dispute for transaction "
+            return "CONFIRMATION_REQUIRED token=" + token + ": describe this back to the customer in your own "
+                    + "words and ask them to confirm before calling this tool again with confirmationToken=\""
+                    + token + "\" — Open a dispute for transaction "
                     + transactionId + " ($" + txn.amount() + " at " + txn.merchant() + ") on account "
                     + txn.accountId() + ", reason: " + reason + ".";
         }
@@ -325,13 +307,11 @@ public class BankingTools {
             + "lost/stolen or fraud suspected. Protective and reversible.")
     public String freezeCard(@ToolParam(description = "card id, e.g. CRD-7001") String cardId,
                              @ToolParam(description = "reason for the freeze") String reason,
-                             @ToolParam(description = "true ONLY if the customer has already explicitly confirmed "
-                                     + "freezing THIS EXACT card earlier in this conversation, e.g. said \"yes\" "
-                                     + "after you named the card back to them; false or omitted on the first "
-                                     + "attempt. If they said \"my card\" without naming which one and they have "
-                                     + "more than one, list their cards and ask which — never freeze more than "
-                                     + "the one card they confirmed.")
-                             Boolean confirmed,
+                             @ToolParam(description = CONFIRMATION_TOKEN_PARAM_DESC
+                                     + " If they said \"my card\" without naming which one and they have more "
+                                     + "than one, list their cards and ask which — never freeze more than the "
+                                     + "one card they confirmed.")
+                             String confirmationToken,
                              ToolContext ctx) {
         var p = principal(ctx);
         require(p, "cards:manage");
@@ -346,11 +326,12 @@ public class BankingTools {
         }
         if ("FROZEN".equals(card.status())) return "Card " + cardId + " is already frozen.";
 
-        if (!Boolean.TRUE.equals(confirmed)) {
+        if (!confirmationGuard.verify(confirmationToken, p.userId(), "freezeCard", cardId)) {
+            String token = confirmationGuard.issue(p.userId(), "freezeCard", cardId);
             audit.toolCalled("freezeCard:pending-confirmation", p.tenantId());
-            return "CONFIRMATION_REQUIRED: tell the customer you're about to freeze card " + cardId
-                    + " (" + card.type() + " ****" + card.last4() + ") and ask them to confirm before calling "
-                    + "this tool again with confirmed=true.";
+            return "CONFIRMATION_REQUIRED token=" + token + ": tell the customer you're about to freeze card "
+                    + cardId + " (" + card.type() + " ****" + card.last4() + ") and ask them to confirm before "
+                    + "calling this tool again with confirmationToken=\"" + token + "\".";
         }
 
         audit.toolCalled("freezeCard", p.tenantId());
@@ -367,10 +348,8 @@ public class BankingTools {
             + "Creates a human-approval request; does not charge the customer directly.")
     public String requestCardReplacement(@ToolParam(description = "card id to replace") String cardId,
                                          @ToolParam(description = "reason for replacement") String reason,
-                                         @ToolParam(description = "true ONLY if the customer has already "
-                                                 + "explicitly confirmed replacing THIS EXACT card earlier in "
-                                                 + "this conversation; false or omitted on the first attempt")
-                                         Boolean confirmed,
+                                         @ToolParam(description = CONFIRMATION_TOKEN_PARAM_DESC)
+                                         String confirmationToken,
                                          ToolContext ctx) {
         var p = principal(ctx);
         require(p, "cards:manage");
@@ -384,17 +363,19 @@ public class BankingTools {
             throw new AccessDeniedException("That card is not on one of your accounts.");
         }
 
-        if (!Boolean.TRUE.equals(confirmed)) {
+        if (!confirmationGuard.verify(confirmationToken, p.userId(), "requestCardReplacement", cardId)) {
+            String token = confirmationGuard.issue(p.userId(), "requestCardReplacement", cardId);
             audit.toolCalled("requestCardReplacement:pending-confirmation", p.tenantId());
-            return "CONFIRMATION_REQUIRED: tell the customer a replacement for card " + cardId
+            return "CONFIRMATION_REQUIRED token=" + token + ": tell the customer a replacement for card " + cardId
                     + " (" + card.type() + " ****" + card.last4() + ") carries a standard $5 fee (waivable per "
-                    + "policy) and ask them to confirm before calling this tool again with confirmed=true.";
+                    + "policy) and ask them to confirm before calling this tool again with confirmationToken=\""
+                    + token + "\".";
         }
 
         audit.toolCalled("requestCardReplacement", p.tenantId());
         status(ctx, "Ordering a replacement for " + cardId + "…");
-        // Standard replacement fee per card-services policy; waivable by the approver.
-        var approval = banking.requestApproval("CARD-REPLACEMENT:" + cardId,
+        
+        var approval = banking.requestApproval(p.tenantId(), "CARD-REPLACEMENT:" + cardId,
                 new BigDecimal("5.00"), p.userId());
         markMutated(ctx);
         emitApproval(ctx, approval);
@@ -427,15 +408,12 @@ public class BankingTools {
             + "This does not move money; it creates a request for human approval by bank staff.")
     public String issueProvisionalCredit(@ToolParam(description = "case id") String caseId,
                                          @ToolParam(description = "credit amount in dollars") String amount,
-                                         @ToolParam(description = "true ONLY if the customer has already "
-                                                 + "explicitly confirmed THIS EXACT amount and case earlier in "
-                                                 + "this conversation; false or omitted on the first attempt")
-                                         Boolean confirmed,
+                                         @ToolParam(description = CONFIRMATION_TOKEN_PARAM_DESC)
+                                         String confirmationToken,
                                          ToolContext ctx) {
         var p = principal(ctx);
         require(p, "credit:request");
-        // Ownership check backported from the LC4j build — the original allowed a
-        // credit request against any case id.
+
         var c = banking.getCase(caseId);
         if (c == null) {
             markFailed(ctx);
@@ -446,27 +424,44 @@ public class BankingTools {
             throw new AccessDeniedException("That case is not on one of your accounts.");
         }
 
-        if (!Boolean.TRUE.equals(confirmed)) {
+        BigDecimal amt;
+        try {
+            amt = new BigDecimal(amount);
+        } catch (NumberFormatException e) {
+            return "That doesn't look like a valid dollar amount.";
+        }
+        if (amt.signum() <= 0) {
+            return "Credit amount must be a positive dollar amount.";
+        }
+
+        var disputedTxn = banking.findTransaction(c.transactionId());
+        BigDecimal cap = disputedTxn != null
+                ? disputedTxn.amount().multiply(new BigDecimal("1.5"))
+                : MAX_SELF_TRANSFER;
+        if (amt.compareTo(cap) > 0) {
+            return "That exceeds what can be requested for this dispute (max $" + cap + ").";
+        }
+
+        if (!confirmationGuard.verify(confirmationToken, p.userId(), "issueProvisionalCredit", caseId, amt.toPlainString())) {
+            String token = confirmationGuard.issue(p.userId(), "issueProvisionalCredit", caseId, amt.toPlainString());
             audit.toolCalled("issueProvisionalCredit:pending-confirmation", p.tenantId());
-            return "CONFIRMATION_REQUIRED: tell the customer you're about to request a $" + amount
+            return "CONFIRMATION_REQUIRED token=" + token + ": tell the customer you're about to request a $" + amt
                     + " provisional credit for case " + caseId + " (bank staff still must approve it) and ask "
-                    + "them to confirm before calling this tool again with confirmed=true.";
+                    + "them to confirm before calling this tool again with confirmationToken=\"" + token + "\".";
         }
 
         audit.toolCalled("issueProvisionalCredit", p.tenantId());
         status(ctx, "Requesting provisional credit approval…");
-        // Human-in-the-loop: the model can REQUEST money movement, never EXECUTE it.
-        var approval = banking.requestApproval(caseId, new BigDecimal(amount), p.userId());
+        
+        var approval = banking.requestApproval(p.tenantId(), caseId, amt, p.userId());
         markMutated(ctx);
         emitApproval(ctx, approval);
         log.info("tool.issueProvisionalCredit user={} case={} amount={} -> {} (approval {})",
-                p.userId(), caseId, amount, approval.status(), approval.approvalId());
-        return "Provisional credit of $" + amount + " for case " + caseId
+                p.userId(), caseId, amt, approval.status(), approval.approvalId());
+        return "Provisional credit of $" + amt + " for case " + caseId
                 + " is " + approval.status() + " (approval id " + approval.approvalId()
                 + "). No funds have moved; bank staff will review it.";
     }
-
-    // --- Phase 1: payments ---------------------------------------------------------------
 
     @Tool(description = "Transfer money between two of the customer's OWN accounts (never to "
             + "someone else's account — that needs a different rail this demo doesn't have). "
@@ -475,9 +470,7 @@ public class BankingTools {
             @ToolParam(description = "source account id") String fromAccountId,
             @ToolParam(description = "destination account id") String toAccountId,
             @ToolParam(description = "amount in dollars") String amount,
-            @ToolParam(description = "true ONLY if the customer has already explicitly confirmed "
-                    + "THIS EXACT transfer (amount + both accounts) earlier in this conversation; "
-                    + "false or omitted on the first attempt") Boolean confirmed,
+            @ToolParam(description = CONFIRMATION_TOKEN_PARAM_DESC) String confirmationToken,
             ToolContext ctx) {
         var p = principal(ctx);
         require(p, "money:transfer");
@@ -497,10 +490,7 @@ public class BankingTools {
         } catch (NumberFormatException e) {
             return "That doesn't look like a valid dollar amount.";
         }
-        // Fail fast with a friendly message before the confirmation round-trip — a negative
-        // amount would otherwise pass the domain layer's funds check (2500 >= -100) and
-        // subtract(-100) CREDITS the source while debiting the destination, reversing the
-        // transfer's direction. BankingService.transfer also rejects this defensively.
+
         if (amt.signum() <= 0) {
             return "Transfer amount must be a positive dollar amount.";
         }
@@ -511,11 +501,14 @@ public class BankingTools {
             return "That exceeds the per-transfer limit of $" + MAX_SELF_TRANSFER + ".";
         }
 
-        if (!Boolean.TRUE.equals(confirmed)) {
+        if (!confirmationGuard.verify(confirmationToken, p.userId(), "transferBetweenOwnAccounts",
+                fromAccountId, toAccountId, amt.toPlainString())) {
+            String token = confirmationGuard.issue(p.userId(), "transferBetweenOwnAccounts",
+                    fromAccountId, toAccountId, amt.toPlainString());
             audit.toolCalled("transferBetweenOwnAccounts:pending-confirmation", p.tenantId());
-            return "CONFIRMATION_REQUIRED: tell the customer you're about to move $" + amt + " from "
-                    + fromAccountId + " to " + toAccountId + " and ask them to confirm before calling "
-                    + "this tool again with confirmed=true.";
+            return "CONFIRMATION_REQUIRED token=" + token + ": tell the customer you're about to move $" + amt
+                    + " from " + fromAccountId + " to " + toAccountId + " and ask them to confirm before calling "
+                    + "this tool again with confirmationToken=\"" + token + "\".";
         }
 
         audit.toolCalled("transferBetweenOwnAccounts", p.tenantId());
@@ -576,13 +569,9 @@ public class BankingTools {
         return "Other";
     }
 
-    // --- Phase 1: card controls -----------------------------------------------------------
-
     @Tool(description = "Unfreeze one of the customer's own cards that is currently frozen.")
     public String unfreezeCard(@ToolParam(description = "card id") String cardId,
-                               @ToolParam(description = "true ONLY if the customer has already explicitly "
-                                       + "confirmed unfreezing THIS EXACT card earlier in this conversation; "
-                                       + "false or omitted on the first attempt") Boolean confirmed,
+                               @ToolParam(description = CONFIRMATION_TOKEN_PARAM_DESC) String confirmationToken,
                                ToolContext ctx) {
         var p = principal(ctx);
         require(p, "cards:manage");
@@ -593,11 +582,12 @@ public class BankingTools {
         }
         if (!"FROZEN".equals(card.status())) return "Card " + cardId + " is not frozen.";
 
-        if (!Boolean.TRUE.equals(confirmed)) {
+        if (!confirmationGuard.verify(confirmationToken, p.userId(), "unfreezeCard", cardId)) {
+            String token = confirmationGuard.issue(p.userId(), "unfreezeCard", cardId);
             audit.toolCalled("unfreezeCard:pending-confirmation", p.tenantId());
-            return "CONFIRMATION_REQUIRED: tell the customer you're about to unfreeze card " + cardId
-                    + " (" + card.type() + " ****" + card.last4() + ") and ask them to confirm before calling "
-                    + "this tool again with confirmed=true.";
+            return "CONFIRMATION_REQUIRED token=" + token + ": tell the customer you're about to unfreeze card "
+                    + cardId + " (" + card.type() + " ****" + card.last4() + ") and ask them to confirm before "
+                    + "calling this tool again with confirmationToken=\"" + token + "\".";
         }
 
         audit.toolCalled("unfreezeCard", p.tenantId());
@@ -621,7 +611,19 @@ public class BankingTools {
             throw new AccessDeniedException("That card is not on one of your accounts.");
         }
         audit.toolCalled("setCardSpendingLimit", p.tenantId());
-        BigDecimal parsed = "none".equalsIgnoreCase(limit.trim()) ? null : new BigDecimal(limit);
+        BigDecimal parsed;
+        if ("none".equalsIgnoreCase(limit.trim())) {
+            parsed = null;
+        } else {
+            try {
+                parsed = new BigDecimal(limit);
+            } catch (NumberFormatException e) {
+                return "That doesn't look like a valid dollar amount — use a number or \"none\".";
+            }
+            if (parsed.signum() <= 0) {
+                return "Spending limit must be a positive dollar amount (or \"none\" to clear it).";
+            }
+        }
         status(ctx, "Updating spending limit for " + cardId + "…");
         var updated = banking.setSpendingLimit(cardId, parsed);
         markMutated(ctx);
@@ -640,41 +642,51 @@ public class BankingTools {
                                               ToolContext ctx) {
         var p = principal(ctx);
         require(p, "cards:manage");
+        String normalizedCategory = category == null ? "" : category.trim().toUpperCase();
+        if (!MERCHANT_CATEGORIES.contains(normalizedCategory)) {
+            return "Unknown merchant category \"" + category + "\". Valid categories: "
+                    + String.join(", ", MERCHANT_CATEGORIES) + ".";
+        }
         var card = banking.findCard(cardId);
         if (card == null) { markFailed(ctx); audit.toolCalled("toggleMerchantCategoryBlock", p.tenantId()); return "No card found with id " + cardId + "."; }
         if (ownedAccount(p, card.accountId()) == null) {
             throw new AccessDeniedException("That card is not on one of your accounts.");
         }
         audit.toolCalled("toggleMerchantCategoryBlock", p.tenantId());
-        status(ctx, (blocked ? "Blocking " : "Unblocking ") + category + " on " + cardId + "…");
-        var updated = banking.toggleMerchantCategory(cardId, category, blocked);
+        status(ctx, (blocked ? "Blocking " : "Unblocking ") + normalizedCategory + " on " + cardId + "…");
+        var updated = banking.toggleMerchantCategory(cardId, normalizedCategory, blocked);
         markMutated(ctx);
         emitCards(ctx, java.util.List.of(updated));
         log.info("tool.toggleMerchantCategoryBlock user={} card={} category={} blocked={}",
-                p.userId(), cardId, category, blocked);
-        return "Card " + cardId + " " + (blocked ? "now blocks" : "no longer blocks") + " " + category.toUpperCase() + ".";
+                p.userId(), cardId, normalizedCategory, blocked);
+        return "Card " + cardId + " " + (blocked ? "now blocks" : "no longer blocks") + " " + normalizedCategory + ".";
     }
-
-    // --- Phase 1: profile ------------------------------------------------------------------
 
     @Tool(description = "Update the customer's contact info (email and/or phone). Pass null/omit "
             + "a field to leave it unchanged.")
     public String updateContactInfo(@ToolParam(description = "new email, or omit") String email,
                                     @ToolParam(description = "new phone, or omit") String phone,
-                                    @ToolParam(description = "true ONLY if the customer has already explicitly "
-                                            + "confirmed THIS EXACT change earlier in this conversation — contact "
-                                            + "info is also the fraud-alert channel, so treat it like any other "
-                                            + "mutating action; false or omitted on the first attempt")
-                                    Boolean confirmed,
+                                    @ToolParam(description = CONFIRMATION_TOKEN_PARAM_DESC
+                                            + " Contact info is also the fraud-alert channel, so treat it like any "
+                                            + "other mutating action.")
+                                    String confirmationToken,
                                     ToolContext ctx) {
         var p = principal(ctx);
         require(p, "profile:write");
+        if (email != null && !EMAIL_PATTERN.matcher(email).matches()) {
+            return "That doesn't look like a valid email address.";
+        }
+        if (phone != null && !PHONE_PATTERN.matcher(phone).matches()) {
+            return "That doesn't look like a valid phone number.";
+        }
 
-        if (!Boolean.TRUE.equals(confirmed)) {
+        if (!confirmationGuard.verify(confirmationToken, p.userId(), "updateContactInfo", email, phone)) {
+            String token = confirmationGuard.issue(p.userId(), "updateContactInfo", email, phone);
             audit.toolCalled("updateContactInfo:pending-confirmation", p.tenantId());
-            return "CONFIRMATION_REQUIRED: tell the customer you're about to update their contact info to"
-                    + (email != null ? " email " + email : "") + (phone != null ? " phone " + phone : "")
-                    + " and ask them to confirm before calling this tool again with confirmed=true.";
+            return "CONFIRMATION_REQUIRED token=" + token + ": tell the customer you're about to update their "
+                    + "contact info to" + (email != null ? " email " + email : "")
+                    + (phone != null ? " phone " + phone : "") + " and ask them to confirm before calling this "
+                    + "tool again with confirmationToken=\"" + token + "\".";
         }
 
         audit.toolCalled("updateContactInfo", p.tenantId());
@@ -691,10 +703,16 @@ public class BankingTools {
                                 @ToolParam(description = "new nickname") String nickname, ToolContext ctx) {
         var p = principal(ctx);
         require(p, "profile:write");
+        if (nickname == null || nickname.isBlank()) {
+            return "Nickname can't be empty.";
+        }
+        if (nickname.length() > MAX_NICKNAME_LENGTH) {
+            return "Nickname must be " + MAX_NICKNAME_LENGTH + " characters or fewer.";
+        }
         var acct = ownedAccount(p, accountId);
         if (acct == null) { markFailed(ctx); audit.toolCalled("renameAccount", p.tenantId()); return "No account found: " + accountId; }
         audit.toolCalled("renameAccount", p.tenantId());
-        var updated = banking.renameAccount(accountId, nickname);
+        var updated = banking.renameAccount(accountId, nickname.strip());
         markMutated(ctx);
         emitAccounts(ctx, java.util.List.of(updated));
         log.info("tool.renameAccount user={} account={} nickname={}", p.userId(), accountId, nickname);
@@ -705,25 +723,27 @@ public class BankingTools {
             + "request; the account stays open until staff process it.")
     public String requestAccountClosure(@ToolParam(description = "account id") String accountId,
                                         @ToolParam(description = "reason for closing") String reason,
-                                        @ToolParam(description = "true ONLY if the customer has already explicitly "
-                                                + "confirmed closing THIS EXACT account earlier in this conversation; "
-                                                + "false or omitted on the first attempt") Boolean confirmed,
+                                        @ToolParam(description = CONFIRMATION_TOKEN_PARAM_DESC)
+                                        String confirmationToken,
                                         ToolContext ctx) {
         var p = principal(ctx);
         require(p, "account:write");
         var acct = ownedAccount(p, accountId);
         if (acct == null) { markFailed(ctx); audit.toolCalled("requestAccountClosure", p.tenantId()); return "No account found: " + accountId; }
 
-        if (!Boolean.TRUE.equals(confirmed)) {
+        if (!confirmationGuard.verify(confirmationToken, p.userId(), "requestAccountClosure", accountId)) {
+            String token = confirmationGuard.issue(p.userId(), "requestAccountClosure", accountId);
             audit.toolCalled("requestAccountClosure:pending-confirmation", p.tenantId());
-            return "CONFIRMATION_REQUIRED: tell the customer you're about to submit a closure request for "
-                    + accountId + " (current balance $" + acct.balance() + " — closure typically requires a "
-                    + "zero balance) and ask them to confirm before calling this tool again with confirmed=true.";
+            return "CONFIRMATION_REQUIRED token=" + token + ": tell the customer you're about to submit a "
+                    + "closure request for " + accountId + " (current balance $" + acct.balance() + " — closure "
+                    + "typically requires a zero balance) and ask them to confirm before calling this tool again "
+                    + "with confirmationToken=\"" + token + "\".";
         }
 
         audit.toolCalled("requestAccountClosure", p.tenantId());
         status(ctx, "Submitting closure request for " + accountId + "…");
-        var approval = banking.requestApproval("ACCOUNT-CLOSURE:" + accountId, acct.balance(), p.userId());
+
+        var approval = banking.requestApproval(p.tenantId(), "ACCOUNT-CLOSURE:" + accountId, acct.balance(), p.userId());
         markMutated(ctx);
         emitApproval(ctx, approval);
         log.info("tool.requestAccountClosure user={} account={} approval={}", p.userId(), accountId, approval.approvalId());
@@ -760,14 +780,19 @@ public class BankingTools {
         } catch (Exception e) {
             return "That doesn't look like a valid date (use YYYY-MM-DD).";
         }
+        java.time.LocalDate today = java.time.LocalDate.now();
+        if (untilDate.isBefore(today)) {
+            return "That date is in the past — a travel notice needs a future end date.";
+        }
+        if (untilDate.isAfter(today.plusDays(MAX_TRAVEL_NOTICE_DAYS_AHEAD))) {
+            return "Travel notices can be set at most " + MAX_TRAVEL_NOTICE_DAYS_AHEAD + " days out.";
+        }
         var updated = banking.setTravelNotice(p.tenantId(), p.userId(), untilDate, destination);
         markMutated(ctx);
         emitProfile(ctx, updated);
         log.info("tool.setTravelNotice user={} until={} destination={}", p.userId(), untilDate, destination);
         return "Travel notice set for " + destination + " through " + untilDate + ".";
     }
-
-    // --- Phase 1: disputes & fraud ---------------------------------------------------------
 
     @Tool(description = "Attach a note that supporting evidence was provided for one of the customer's "
             + "own dispute cases (receipt, correspondence, etc). No risk, no confirmation needed.")
@@ -811,9 +836,7 @@ public class BankingTools {
             + "same-day priority review vs. the standard dispute window). Opens a fraud-flagged case.")
     public String reportFraud(@ToolParam(description = "transaction id") String transactionId,
                               @ToolParam(description = "what looked fraudulent") String description,
-                              @ToolParam(description = "true ONLY if the customer has already explicitly "
-                                      + "confirmed THIS EXACT fraud report earlier in this conversation; "
-                                      + "false or omitted on the first attempt") Boolean confirmed,
+                              @ToolParam(description = CONFIRMATION_TOKEN_PARAM_DESC) String confirmationToken,
                               ToolContext ctx) {
         var p = principal(ctx);
         require(p, "cases:create");
@@ -827,12 +850,13 @@ public class BankingTools {
             throw new AccessDeniedException("That transaction is not on one of your accounts.");
         }
 
-        if (!Boolean.TRUE.equals(confirmed)) {
+        if (!confirmationGuard.verify(confirmationToken, p.userId(), "reportFraud", transactionId, description)) {
+            String token = confirmationGuard.issue(p.userId(), "reportFraud", transactionId, description);
             audit.toolCalled("reportFraud:pending-confirmation", p.tenantId());
-            return "CONFIRMATION_REQUIRED: tell the customer you're about to file a FRAUD report for "
-                    + transactionId + " ($" + txn.amount() + " at " + txn.merchant() + ") — this gets "
-                    + "same-day priority review — and ask them to confirm before calling this tool again "
-                    + "with confirmed=true.";
+            return "CONFIRMATION_REQUIRED token=" + token + ": tell the customer you're about to file a FRAUD "
+                    + "report for " + transactionId + " ($" + txn.amount() + " at " + txn.merchant() + ") — this "
+                    + "gets same-day priority review — and ask them to confirm before calling this tool again "
+                    + "with confirmationToken=\"" + token + "\".";
         }
 
         audit.toolCalled("reportFraud", p.tenantId());

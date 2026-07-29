@@ -15,13 +15,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * Modular RAG (Phase 1 upgrade). Uses RetrievalAugmentationAdvisor with:
- *  - RewriteQueryTransformer: rewrites the user's question into a cleaner
- *    retrieval query (fixes recall gaps like "deadline" vs "must file within N days"),
- *  - VectorStoreDocumentRetriever: tenant-filtered retrieval (isolation preserved),
- *  - allowEmptyContext=false: forces a refusal when nothing relevant is found.
- */
 @RestController
 @RequestMapping("/api/rag")
 public class AdvancedRagController {
@@ -55,10 +48,9 @@ public class AdvancedRagController {
     @PostMapping("/ask-advanced")
     public AskResponse ask(@RequestBody AskRequest request) {
         long start = System.nanoTime();
-        Principal principal = CurrentUser.get();          // identity from verified JWT
+        Principal principal = CurrentUser.get();          
         String tenantId = principal.tenantId();
 
-        // 1. Semantic cache: a rephrased-but-equivalent question skips the LLM entirely.
         var hit = semanticCache.lookup(tenantId, request.question());
         if (hit.isPresent()) {
             long ms = (System.nanoTime() - start) / 1_000_000;
@@ -69,7 +61,7 @@ public class AdvancedRagController {
                 .vectorStore(vectorStore)
                 .topK(6)
                 .similarityThreshold(0.1)
-                // Tenant isolation: hard filter, from trusted context not user input.
+                
                 .filterExpression(() ->
                         new org.springframework.ai.vectorstore.filter.FilterExpressionBuilder()
                                 .eq("tenantId", tenantId).build())
@@ -82,21 +74,17 @@ public class AdvancedRagController {
                 .documentRetriever(retriever)
                 .build();
 
-        // Memory is scoped per tenant+USER+conversation, matching AssistantController's key
-        // shape exactly — without userId, two users of the same bank both posting
-        // conversationId "default" (the client's own default) read and continue each
-        // other's conversation history (CODE_REVIEW.md P0 #9).
         String memoryKey = tenantId + ":" + principal.userId() + ":" + request.conversationId();
 
         String answer = ragClient.prompt()
                 .advisors(ragAdvisor)
                 .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, memoryKey)
-                        .param(GuardrailAdvisor.TENANT_PARAM, tenantId))
+                        .param(GuardrailAdvisor.TENANT_PARAM, tenantId)
+                        .param(GuardrailAdvisor.USER_PARAM, principal.userId()))
                 .user(request.question())
                 .call()
                 .content();
 
-        // 2. Cache the fresh answer for future rephrasings (only refusals are skipped).
         if (answer != null && !answer.toLowerCase().contains("i don't have that")) {
             semanticCache.put(tenantId, request.question(), answer);
         }
