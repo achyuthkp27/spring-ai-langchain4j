@@ -68,7 +68,7 @@ export const MessageBubble = memo(function MessageBubble({ message }: { message:
         className="flex w-full justify-end"
         aria-live="off"
       >
-        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent px-4 py-2.5 text-body text-background shadow-[0_10px_30px_-18px_var(--glow-a)] sm:max-w-[72%]">
+        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent-strong px-4 py-2.5 text-body text-on-accent shadow-[0_10px_30px_-18px_var(--glow-a)] sm:max-w-[72%]">
           <span className="whitespace-pre-wrap">{message.text}</span>
         </div>
       </motion.div>

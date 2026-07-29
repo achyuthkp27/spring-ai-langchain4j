@@ -67,7 +67,7 @@ spring:
 
     vectorstore:
       pgvector:
-        initialize-schema: true
+        initialize-schema: false
         dimensions: 768
         index-type: hnsw
         distance-type: cosine_distance

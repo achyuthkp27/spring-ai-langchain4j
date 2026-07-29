@@ -1,60 +1,54 @@
 "use client";
 
 import { memo } from "react";
-import { motion } from "framer-motion";
 import clsx from "clsx";
-import { Bell, BellOff, Mail, Phone, Plane } from "lucide-react";
+import { Bell, BellOff, Mail, Phone, Plane, UserRound } from "lucide-react";
 import type { ProfileData } from "@/lib/sse";
+import { WidgetCard } from "./WidgetCard";
+
+function Toggle({ on, label }: { on: boolean; label: string }) {
+  const Icon = on ? Bell : BellOff;
+  return (
+    <span
+      className={clsx(
+        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-micro font-medium",
+        on ? "bg-good-soft text-good-ink" : "bg-surface text-muted",
+      )}
+    >
+      <Icon size={11} aria-hidden />
+      {label}
+      <span className="sr-only">{on ? " enabled" : " disabled"}</span>
+      <span aria-hidden className="font-semibold">
+        {on ? "On" : "Off"}
+      </span>
+    </span>
+  );
+}
 
 export const ProfileCard = memo(function ProfileCard({ profile }: { profile: ProfileData }) {
-  const travelActive = !!profile.travelNoticeUntil;
-
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ type: "spring", stiffness: 340, damping: 30 }}
-      className="mt-1 w-full max-w-sm rounded-xl border border-border-soft bg-surface p-3.5"
-    >
-      <p className="text-[11px] font-medium uppercase tracking-wide text-muted">Profile updated</p>
-
-      <div className="mt-2 space-y-1.5 text-[13px]">
+    <WidgetCard icon={UserRound} title="Profile updated">
+      <div className="space-y-1.5 px-3.5 pt-2 text-label">
         <div className="flex items-center gap-2">
-          <Mail size={13} className="shrink-0 text-muted" />
+          <Mail size={13} className="shrink-0 text-muted" aria-hidden />
           <span className="truncate">{profile.email}</span>
         </div>
         <div className="flex items-center gap-2">
-          <Phone size={13} className="shrink-0 text-muted" />
+          <Phone size={13} className="shrink-0 text-muted" aria-hidden />
           <span>{profile.phone}</span>
         </div>
       </div>
 
-      <div className="mt-2.5 flex flex-wrap gap-1.5">
-        <span
-          className={clsx(
-            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-            profile.lowBalanceAlerts ? "bg-good-soft text-good" : "bg-border-soft text-muted",
-          )}
-        >
-          {profile.lowBalanceAlerts ? <Bell size={10} /> : <BellOff size={10} />}
-          Low balance
-        </span>
-        <span
-          className={clsx(
-            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-            profile.largeTransactionAlerts ? "bg-good-soft text-good" : "bg-border-soft text-muted",
-          )}
-        >
-          {profile.largeTransactionAlerts ? <Bell size={10} /> : <BellOff size={10} />}
-          Large txn
-        </span>
-        {travelActive && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
-            <Plane size={10} />
+      <div className="flex flex-wrap gap-1.5 px-3.5 pb-3 pt-2.5">
+        <Toggle on={profile.lowBalanceAlerts} label="Low balance" />
+        <Toggle on={profile.largeTransactionAlerts} label="Large transaction" />
+        {profile.travelNoticeUntil && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-micro font-medium text-accent-ink">
+            <Plane size={11} aria-hidden />
             {profile.travelDestination} until {profile.travelNoticeUntil}
           </span>
         )}
       </div>
-    </motion.div>
+    </WidgetCard>
   );
 });

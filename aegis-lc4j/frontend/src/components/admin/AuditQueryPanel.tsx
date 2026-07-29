@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Search } from "lucide-react";
+import { AlertTriangle, Search } from "lucide-react";
 import { fetchAuditQuery, type AuditEvent } from "@/lib/adminApi";
 import { EventsTable } from "./EventsTable";
 
@@ -15,8 +15,7 @@ export function AuditQueryPanel() {
     setLoading(true);
     setError(false);
     try {
-      const data = await fetchAuditQuery({ tenant: tenant || undefined, limit: 200 });
-      setRows(data);
+      setRows(await fetchAuditQuery({ tenant: tenant || undefined, limit: 200 }));
     } catch {
       setError(true);
     } finally {
@@ -26,22 +25,32 @@ export function AuditQueryPanel() {
 
   return (
     <div>
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <label htmlFor="audit-tenant" className="sr-only">
+          Filter by tenant
+        </label>
         <input
+          id="audit-tenant"
           value={tenant}
           onChange={(e) => setTenant(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && run()}
           placeholder="Filter by tenant (e.g. achu-bank) — blank for all"
-          className="flex-1 rounded-lg border border-border-soft bg-transparent px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-accent/40"
+          className="flex-1 rounded-xl border border-hairline bg-surface-2/60 px-3 py-2 text-label outline-none transition-colors placeholder:text-muted focus:border-accent/45"
         />
         <button
           onClick={run}
           disabled={loading}
-          className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+          className="flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-accent-strong px-3.5 py-2 text-label font-medium text-on-accent transition-opacity disabled:opacity-50"
         >
-          <Search size={13} /> {loading ? "Querying…" : "Query (last 7 days)"}
+          <Search size={14} /> {loading ? "Querying…" : "Query last 7 days"}
         </button>
       </div>
-      {error && <p className="text-sm text-critical">Query failed — is the backend reachable?</p>}
+      {error && (
+        <p className="flex items-center gap-1.5 text-label text-critical-ink">
+          <AlertTriangle size={14} className="shrink-0 text-critical" />
+          Query failed — is the backend reachable?
+        </p>
+      )}
       {rows && (
         <EventsTable
           rows={rows.map((r) => ({

@@ -30,6 +30,11 @@
   --accent: #6366f1;
   --accent-soft: #e6e7fd;
   --accent-ink: #4442d6;
+  /* Solid accent fill + its foreground. `--accent` itself is too light to
+     carry --background as text in light mode (4.17:1), so filled controls use
+     this pair instead. 7.01:1 light / 7.87:1 dark. */
+  --accent-strong: #4442d6;
+  --on-accent: #ffffff;
 
   --system: #8b5cf6;
   --system-soft: #eee8fd;
@@ -69,6 +74,8 @@
   --accent: #8b9cff;
   --accent-soft: #1c2140;
   --accent-ink: #a5b2ff;
+  --accent-strong: #8b9cff;
+  --on-accent: #08090c;
 
   --system: #a78bfa;
   --system-soft: #251c40;
@@ -108,6 +115,8 @@
   --color-accent: var(--accent);
   --color-accent-soft: var(--accent-soft);
   --color-accent-ink: var(--accent-ink);
+  --color-accent-strong: var(--accent-strong);
+  --color-on-accent: var(--on-accent);
 
   --color-system: var(--system);
   --color-system-soft: var(--system-soft);

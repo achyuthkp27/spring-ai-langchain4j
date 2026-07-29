@@ -127,7 +127,7 @@ export function Composer({
               className={clsx(
                 "grid h-9 w-9 shrink-0 place-items-center rounded-full transition-all",
                 text.trim()
-                  ? "bg-accent text-background shadow-[0_0_20px_-4px_var(--glow-a)]"
+                  ? "bg-accent-strong text-on-accent shadow-[0_0_20px_-4px_var(--glow-a)]"
                   : "cursor-not-allowed bg-surface-2 text-muted",
               )}
             >
