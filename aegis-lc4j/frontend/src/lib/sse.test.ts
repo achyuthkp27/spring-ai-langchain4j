@@ -47,7 +47,7 @@ describe("streamChat frame parsing", () => {
     global.fetch = vi.fn(async () => new Response(stream, { status: 200 })) as typeof fetch;
 
     const handlers = noopHandlers();
-    await streamChat("token", "c1", "hi", handlers);
+    await streamChat("c1", "hi", handlers);
 
     expect(handlers.onToken).toHaveBeenCalledWith("Hello");
   });
@@ -60,7 +60,7 @@ describe("streamChat frame parsing", () => {
     global.fetch = vi.fn(async () => new Response(stream, { status: 200 })) as typeof fetch;
 
     const handlers = noopHandlers();
-    await streamChat("token", "c1", "hi", handlers);
+    await streamChat("c1", "hi", handlers);
 
     expect(handlers.onToken).toHaveBeenCalledWith("Hi");
     expect(handlers.onMeta).toHaveBeenCalledWith(
@@ -72,7 +72,7 @@ describe("streamChat frame parsing", () => {
     global.fetch = vi.fn(async () => new Response(null, { status: 500 })) as typeof fetch;
 
     const handlers = noopHandlers();
-    await streamChat("token", "c1", "hi", handlers);
+    await streamChat("c1", "hi", handlers);
 
     expect(handlers.onError).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "http", status: 500 }),
@@ -86,7 +86,7 @@ describe("streamChat frame parsing", () => {
     global.fetch = vi.fn(async () => new Response(stream, { status: 200 })) as typeof fetch;
 
     const handlers = noopHandlers();
-    await streamChat("token", "c1", "hi", handlers);
+    await streamChat("c1", "hi", handlers);
 
     expect(handlers.onToken).toHaveBeenCalledWith("partial");
     expect(handlers.onMeta).not.toHaveBeenCalled();
@@ -101,29 +101,41 @@ describe("streamChat frame parsing", () => {
     global.fetch = vi.fn(async () => new Response(stream, { status: 200 })) as typeof fetch;
 
     const handlers = noopHandlers();
-    await streamChat("token", "c1", "hi", handlers);
+    await streamChat("c1", "hi", handlers);
 
     expect(handlers.onError).not.toHaveBeenCalled();
     expect(handlers.onMeta).toHaveBeenCalled();
   });
 
-  it("re-auths once on a 401 and retries with the fresh token", async () => {
-    const seenAuth: string[] = [];
-    global.fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      const auth = (init?.headers as Record<string, string>)?.Authorization ?? "";
-      seenAuth.push(auth);
-      if (auth === "Bearer stale") return new Response(null, { status: 401 });
+  it("calls reauth once on a 401 and retries the request", async () => {
+    let calls = 0;
+    global.fetch = vi.fn(async () => {
+      calls++;
+      if (calls === 1) return new Response(null, { status: 401 });
       const stream = sseStreamFromChunks([
         'event: meta\ndata: {"conversationId":"c1","answer":"ok","source":"llm","elapsedMs":1}\n\n',
       ]);
       return new Response(stream, { status: 200 });
     }) as typeof fetch;
 
+    const reauth = vi.fn(async () => true);
     const handlers = noopHandlers();
-    await streamChat("stale", "c1", "hi", handlers, undefined, async () => "fresh");
+    await streamChat("c1", "hi", handlers, undefined, reauth);
 
-    expect(seenAuth).toEqual(["Bearer stale", "Bearer fresh"]);
+    expect(reauth).toHaveBeenCalledTimes(1);
+    expect(calls).toBe(2);
     expect(handlers.onMeta).toHaveBeenCalled();
     expect(handlers.onError).not.toHaveBeenCalled();
+  });
+
+  it("gives up with onError when a 401 reauth fails", async () => {
+    global.fetch = vi.fn(async () => new Response(null, { status: 401 })) as typeof fetch;
+
+    const handlers = noopHandlers();
+    await streamChat("c1", "hi", handlers, undefined, async () => false);
+
+    expect(handlers.onError).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "http", status: 401 }),
+    );
   });
 });

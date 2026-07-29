@@ -1,40 +1,32 @@
 export interface Session {
-  token: string;
   userId: string;
   tenantId: string;
   role: string;
 }
 
-interface CachedSession extends Session {
+interface CachedProfile extends Session {
   exp: number;
 }
 
-function decodeJwtExpMs(token: string): number | null {
-  try {
-    const payload = token.split(".")[1];
-    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
-    const claims = JSON.parse(json) as { exp?: number };
-    return typeof claims.exp === "number" ? claims.exp * 1000 : null;
-  } catch {
-    return null;
-  }
-}
-
 /**
- * One token lifecycle, shared by the customer app and the admin dashboard.
+ * One session lifecycle, shared by the customer app and the admin dashboard.
  *
- * Both previously reinvented this and diverged: the admin copy estimated `exp`
- * instead of decoding it and had no 401 retry, so a stale admin token failed
- * the 15s poll forever. Routing both through here means one real-`exp` decode
- * and one 401-retry policy.
+ * The JWT never lives here: minting hits `/api/auth/token`, which sets it as an
+ * httpOnly, SameSite=Strict cookie the browser's JS cannot read, and returns
+ * only the non-secret profile. Same-origin requests carry the cookie
+ * automatically and the proxy attaches it upstream, so nothing in client code
+ * ever holds a bearer token — an XSS has no token to steal.
+ *
+ * `cacheKey` scopes the readable profile cache (not the credential) so the two
+ * identities don't clobber each other's displayed user/tenant.
  */
 export function createAuthClient(cacheKey: string, mintBody: Record<string, string> = {}) {
-  const read = (): CachedSession | null => {
+  const read = (): CachedProfile | null => {
     if (typeof window === "undefined") return null;
     try {
       const raw = sessionStorage.getItem(cacheKey);
       if (!raw) return null;
-      const parsed = JSON.parse(raw) as CachedSession;
+      const parsed = JSON.parse(raw) as CachedProfile;
       // Refresh a minute early so an in-flight request never races expiry.
       if (Date.now() >= parsed.exp - 60_000) return null;
       return parsed;
@@ -43,11 +35,8 @@ export function createAuthClient(cacheKey: string, mintBody: Record<string, stri
     }
   };
 
-  const write = (data: Session): Session => {
-    if (typeof window === "undefined") return data;
-    const exp = decodeJwtExpMs(data.token) ?? Date.now() + 55 * 60_000;
-    sessionStorage.setItem(cacheKey, JSON.stringify({ ...data, exp }));
-    return data;
+  const write = (p: CachedProfile) => {
+    if (typeof window !== "undefined") sessionStorage.setItem(cacheKey, JSON.stringify(p));
   };
 
   const clear = () => {
@@ -59,34 +48,37 @@ export function createAuthClient(cacheKey: string, mintBody: Record<string, stri
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(bodyOverride ?? mintBody),
+      credentials: "same-origin",
     });
     if (!res.ok) throw new Error(`auth failed: ${res.status}`);
-    return write((await res.json()) as Session);
+    const data = (await res.json()) as CachedProfile;
+    write(data);
+    return { userId: data.userId, tenantId: data.tenantId, role: data.role };
   };
 
-  const getSession = async (): Promise<Session> => read() ?? (await mint());
-  const getToken = async (): Promise<string> => (await getSession()).token;
+  const getSession = async (): Promise<Session> => {
+    const cached = read();
+    return cached ? { userId: cached.userId, tenantId: cached.tenantId, role: cached.role } : mint();
+  };
 
-  const refreshToken = async (): Promise<string> => {
+  /** Re-mint (refreshing the cookie); returns true so a caller can retry. */
+  const reauth = async (): Promise<boolean> => {
     clear();
-    return getToken();
+    try {
+      await mint();
+      return true;
+    } catch {
+      return false;
+    }
   };
 
-  /** Fetch with the bearer token, re-minting once on a 401. */
+  /** Same-origin fetch (the cookie rides along); re-mints once on a 401 and retries. */
   const authFetch = async (url: string, init: RequestInit = {}): Promise<Response> => {
-    const token = await getToken();
-    const res = await fetch(url, {
-      ...init,
-      headers: { ...init.headers, Authorization: `Bearer ${token}` },
-    });
+    const res = await fetch(url, { ...init, credentials: "same-origin" });
     if (res.status !== 401) return res;
-
-    const fresh = await refreshToken();
-    return fetch(url, {
-      ...init,
-      headers: { ...init.headers, Authorization: `Bearer ${fresh}` },
-    });
+    if (!(await reauth())) return res;
+    return fetch(url, { ...init, credentials: "same-origin" });
   };
 
-  return { getSession, getToken, refreshToken, authFetch, clear, mint };
+  return { getSession, reauth, authFetch, clear, mint };
 }

@@ -1,6 +1,6 @@
 import { createAuthClient } from "./authClient";
 
-const client = createAuthClient("aegis.admin.jwt", {
+const client = createAuthClient("aegis.admin.session", {
   userId: "admin-user",
   tenantId: "achu-bank",
   role: "admin",

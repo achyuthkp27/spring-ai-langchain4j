@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getToken, refreshToken, fetchHistory, type HistoryMessage } from "@/lib/api";
+import { ensureSession, reauth, fetchHistory, type HistoryMessage } from "@/lib/api";
 import {
   streamChat,
   type AccountData,
@@ -193,9 +193,9 @@ export function useChatStream(conversationId: string) {
         if (isCurrent()) setState((s) => ({ ...s, statuses: [], busy: false }));
       };
 
-      let token: string;
+      // Ensure a session cookie exists before streaming (the proxy needs it).
       try {
-        token = await getToken();
+        await ensureSession();
       } catch {
         patchBot((m) => ({
           ...m,
@@ -208,7 +208,6 @@ export function useChatStream(conversationId: string) {
       }
 
       await streamChat(
-        token,
         sendConvId,
         text,
         {
@@ -247,7 +246,7 @@ export function useChatStream(conversationId: string) {
           },
         },
         controller.signal,
-        refreshToken,
+        reauth,
       );
     },
     [conversationId],

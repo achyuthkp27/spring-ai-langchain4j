@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { CANDIDATES, liveBackend } from "@/lib/backendProxy";
 
 // This route proxies SSE; it must never be statically evaluated, and it needs a
 // generous ceiling so a long streamed turn isn't cut off by the platform's
@@ -6,18 +7,10 @@ import { NextRequest } from "next/server";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const IS_PROD = process.env.NODE_ENV === "production";
-
-const CANDIDATES = process.env.BACKEND_URL
-  ? [process.env.BACKEND_URL]
-  : IS_PROD
-    ? []
-    : ["http://localhost:8082", "http://localhost:8081", "http://localhost:8080"];
-
-const PROBE_TIMEOUT_MS = 800;
 const FORWARD_TIMEOUT_MS = 30_000;
-const CACHE_TTL_MS = 10_000;
 const SEGMENT_PATTERN = /^[A-Za-z0-9._-]+$/;
+const USER_COOKIE = "aegis_session";
+const ADMIN_COOKIE = "aegis_admin_session";
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
   "keep-alive",
@@ -26,34 +19,14 @@ const HOP_BY_HOP_HEADERS = new Set([
   "content-length",
 ]);
 
-let cached: { base: string; at: number } | null = null;
-
-async function probe(base: string): Promise<boolean> {
-  try {
-    const res = await fetch(`${base}/actuator/health`, {
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-      cache: "no-store",
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-async function liveBackend(force = false): Promise<string | null> {
-  if (!force && cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.base;
-  for (const base of CANDIDATES) {
-    if (await probe(base)) {
-      cached = { base, at: Date.now() };
-      return base;
-    }
-  }
-  cached = null;
-  return null;
-}
-
 function isStreamingRequest(req: NextRequest): boolean {
   return (req.headers.get("accept") ?? "").includes("text/event-stream");
+}
+
+/** The bearer comes from the httpOnly session cookie, never from a client header. */
+function bearerFor(req: NextRequest, path: string): string | null {
+  const name = path.startsWith("admin/") ? ADMIN_COOKIE : USER_COOKIE;
+  return req.cookies.get(name)?.value ?? null;
 }
 
 async function forward(
@@ -64,10 +37,12 @@ async function forward(
 ): Promise<Response> {
   const url = `${base}/api/${path}${req.nextUrl.search}`;
   const headers: Record<string, string> = {};
-  for (const h of ["authorization", "content-type", "accept"]) {
+  for (const h of ["content-type", "accept"]) {
     const v = req.headers.get(h);
     if (v) headers[h] = v;
   }
+  const bearer = bearerFor(req, path);
+  if (bearer) headers.authorization = `Bearer ${bearer}`;
   const streaming = isStreamingRequest(req);
   const res = await fetch(url, {
     method: req.method,

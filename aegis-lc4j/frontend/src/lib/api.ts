@@ -17,16 +17,16 @@ export interface HistoryMessage {
   widgets: HistoryWidgetEvent[];
 }
 
-const client = createAuthClient("aegis.jwt");
+const client = createAuthClient("aegis.session");
 
-export const getToken = () => client.getToken();
+/** Ensure a session cookie exists (minting one if needed) before an authed request. */
+export const ensureSession = () => client.getSession();
 
-/** Re-mint after a 401, for callers (e.g. the SSE stream) that hold a token directly. */
-export const refreshToken = () => client.refreshToken();
+/** Re-mint after a 401, for the SSE stream to retry. Returns true on success. */
+export const reauth = () => client.reauth();
 
 export async function getProfile(): Promise<Profile> {
-  const { userId, tenantId, role } = await client.getSession();
-  return { userId, tenantId, role };
+  return client.getSession();
 }
 
 export async function switchIdentity(tenantId: string, userId: string): Promise<void> {

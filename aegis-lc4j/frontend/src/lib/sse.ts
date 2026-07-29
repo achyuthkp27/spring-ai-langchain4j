@@ -128,37 +128,32 @@ export interface StreamHandlers {
 /**
  * Drives one assistant turn. Guarantees exactly one terminal callback —
  * `onMeta` (success), `onAbort` (cancelled), or `onError` (anything else) — so
- * the caller can always leave the "streaming" state. `reauth`, when supplied,
- * is called once on a 401 to obtain a fresh token and the request is retried.
+ * the caller can always leave the "streaming" state. Auth rides on the
+ * same-origin session cookie; `reauth`, when supplied, is called once on a 401
+ * to refresh it and the request is retried.
  */
 export async function streamChat(
-  token: string,
   conversationId: string,
   message: string,
   handlers: StreamHandlers,
   signal?: AbortSignal,
-  reauth?: () => Promise<string | null>,
+  reauth?: () => Promise<boolean>,
 ): Promise<void> {
   let res: Response;
-  let bearer = token;
   try {
     for (let attempt = 0; ; attempt++) {
       res = await fetch("/api/assistant", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${bearer}`,
           Accept: "text/event-stream",
         },
         body: JSON.stringify({ conversationId, message }),
+        credentials: "same-origin",
         signal,
       });
-      if (res.status === 401 && reauth && attempt === 0) {
-        const fresh = await reauth();
-        if (fresh) {
-          bearer = fresh;
-          continue;
-        }
+      if (res.status === 401 && reauth && attempt === 0 && (await reauth())) {
+        continue;
       }
       break;
     }
