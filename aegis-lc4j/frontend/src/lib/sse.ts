@@ -1,4 +1,16 @@
-
+import {
+  AccountArraySchema,
+  ApprovalSchema,
+  CardArraySchema,
+  CaseSchema,
+  CitationArraySchema,
+  LedgerArraySchema,
+  matches,
+  MetaSchema,
+  ProfileSchema,
+  StatementSchema,
+  TransactionArraySchema,
+} from "./schemas";
 
 export interface ChatMeta {
   conversationId: string;
@@ -181,35 +193,38 @@ export async function streamChat(
         if (typeof p.s === "string") handlers.onStatus(p.s);
         break;
       case "cards":
-        if (Array.isArray(payload)) handlers.onCards(payload as CardData[]);
+        if (matches(CardArraySchema, payload)) handlers.onCards(payload as CardData[]);
         break;
       case "accounts":
-        if (Array.isArray(payload)) handlers.onAccounts(payload as AccountData[]);
+        if (matches(AccountArraySchema, payload)) handlers.onAccounts(payload as AccountData[]);
         break;
       case "transactions":
-        if (Array.isArray(payload)) handlers.onTransactions(payload as TransactionData[]);
+        if (matches(TransactionArraySchema, payload)) handlers.onTransactions(payload as TransactionData[]);
         break;
       case "case":
-        handlers.onCase(payload as CaseData);
+        if (matches(CaseSchema, payload)) handlers.onCase(payload as CaseData);
         break;
       case "approval":
-        handlers.onApproval(payload as ApprovalData);
+        if (matches(ApprovalSchema, payload)) handlers.onApproval(payload as ApprovalData);
         break;
       case "citations":
-        if (Array.isArray(payload)) handlers.onCitations(payload as CitationData[]);
+        if (matches(CitationArraySchema, payload)) handlers.onCitations(payload as CitationData[]);
         break;
       case "ledger":
-        if (Array.isArray(payload)) handlers.onLedger(payload as LedgerEntryData[]);
+        if (matches(LedgerArraySchema, payload)) handlers.onLedger(payload as LedgerEntryData[]);
         break;
       case "profile":
-        handlers.onProfile(payload as ProfileData);
+        if (matches(ProfileSchema, payload)) handlers.onProfile(payload as ProfileData);
         break;
       case "statement":
-        handlers.onStatement(payload as StatementData);
+        if (matches(StatementSchema, payload)) handlers.onStatement(payload as StatementData);
         break;
       case "meta":
+        // Terminal either way: a malformed meta still ends the turn (as an
+        // incomplete stream) rather than leaving the bubble streaming.
         terminated = true;
-        handlers.onMeta(payload as ChatMeta);
+        if (matches(MetaSchema, payload)) handlers.onMeta(payload as ChatMeta);
+        else handlers.onError({ kind: "stream" });
         break;
       case "error":
         terminated = true;

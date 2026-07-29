@@ -16,6 +16,18 @@ import {
   type StreamError,
   type TransactionData,
 } from "@/lib/sse";
+import {
+  AccountArraySchema,
+  ApprovalSchema,
+  CardArraySchema,
+  CaseSchema,
+  CitationArraySchema,
+  LedgerArraySchema,
+  matches,
+  ProfileSchema,
+  StatementSchema,
+  TransactionArraySchema,
+} from "@/lib/schemas";
 
 export interface Message {
   id: string;
@@ -60,36 +72,41 @@ const mergeTransactions = (existing: TransactionData[] | undefined, incoming: Tr
 const mergeLedger = (existing: LedgerEntryData[] | undefined, incoming: LedgerEntryData[]) =>
   mergeById(existing, incoming, (e) => e.entryId);
 
+// Rehydrating history is the same trust boundary as the live stream, so the
+// persisted widget payloads get the same schema gate — a drifted or corrupt row
+// is skipped rather than rendered as garbage.
 function hydrateAssistantMessage(h: HistoryMessage): Message {
   let msg: Message = { id: id(), role: "assistant", text: h.text };
   for (const w of h.widgets) {
+    const p = w.payload;
     switch (w.type) {
       case "cards":
-        msg = { ...msg, cards: mergeCards(msg.cards, w.payload as CardData[]) };
+        if (matches(CardArraySchema, p)) msg = { ...msg, cards: mergeCards(msg.cards, p as CardData[]) };
         break;
       case "accounts":
-        msg = { ...msg, accounts: mergeAccounts(msg.accounts, w.payload as AccountData[]) };
+        if (matches(AccountArraySchema, p)) msg = { ...msg, accounts: mergeAccounts(msg.accounts, p as AccountData[]) };
         break;
       case "transactions":
-        msg = { ...msg, transactions: mergeTransactions(msg.transactions, w.payload as TransactionData[]) };
+        if (matches(TransactionArraySchema, p))
+          msg = { ...msg, transactions: mergeTransactions(msg.transactions, p as TransactionData[]) };
         break;
       case "case":
-        msg = { ...msg, case: w.payload as CaseData };
+        if (matches(CaseSchema, p)) msg = { ...msg, case: p as CaseData };
         break;
       case "approval":
-        msg = { ...msg, approval: w.payload as ApprovalData };
+        if (matches(ApprovalSchema, p)) msg = { ...msg, approval: p as ApprovalData };
         break;
       case "citations":
-        msg = { ...msg, citations: w.payload as CitationData[] };
+        if (matches(CitationArraySchema, p)) msg = { ...msg, citations: p as CitationData[] };
         break;
       case "ledger":
-        msg = { ...msg, ledger: mergeLedger(msg.ledger, w.payload as LedgerEntryData[]) };
+        if (matches(LedgerArraySchema, p)) msg = { ...msg, ledger: mergeLedger(msg.ledger, p as LedgerEntryData[]) };
         break;
       case "profile":
-        msg = { ...msg, profile: w.payload as ProfileData };
+        if (matches(ProfileSchema, p)) msg = { ...msg, profile: p as ProfileData };
         break;
       case "statement":
-        msg = { ...msg, statement: w.payload as StatementData };
+        if (matches(StatementSchema, p)) msg = { ...msg, statement: p as StatementData };
         break;
     }
   }

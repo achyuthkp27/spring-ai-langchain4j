@@ -19,6 +19,16 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * A per-tenant daily token budget. This is a <b>soft quota</b>, not a hard cap: the check runs at
+ * request start and the charge ({@link #record}) lands at response end, because the token count
+ * isn't known until generation completes. Concurrent requests can therefore all pass the check
+ * before any of them records, so a tenant may overshoot its budget by roughly
+ * {@code concurrency x tokens_per_call}. A hard cap would require reserving an estimated cost up
+ * front and reconciling afterwards; the overshoot is accepted here as the price of charging actual
+ * (not estimated) usage. Redis failures fail open with a logged warning — a budget outage must not
+ * take down chat.
+ */
 @Component
 public class BudgetGuard {
 
