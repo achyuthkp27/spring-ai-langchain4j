@@ -8,16 +8,9 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * A second ChatClient dedicated to grounded RAG answers. Kept separate from the
- * conversational copilot so its system prompt can enforce "answer only from
- * context, cite sources, refuse when context is empty".
- */
 @Configuration
 public class RagConfig {
 
-    // Principled and short. "Add nothing beyond the context" subsumes the specific
-    // failure modes (e.g. inventing an acronym's meaning) at the right altitude.
     private static final String RAG_SYSTEM_PROMPT = """
             You are Achu FinBot's document-grounded assistant for bank staff.
             Answer only from the provided context and cite the source document for each
@@ -33,7 +26,7 @@ public class RagConfig {
                 .defaultSystem(RAG_SYSTEM_PROMPT)
                 .defaultAdvisors(
                         tokenAudit,
-                        // Conversation memory so same-tenant follow-ups keep context.
+                        
                         MessageChatMemoryAdvisor.builder(chatMemory).build())
                 .build();
     }

@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** LLM10 Unbounded Consumption — the per-tenant bucket eventually denies a burst. */
 class RateLimiterTest {
 
     @Test
@@ -16,8 +15,8 @@ class RateLimiterTest {
         for (int i = 0; i < 100; i++) {
             if (limiter.allow("burst-tenant")) allowed++;
         }
-        // Capacity is 20; a tight loop can't refill meaningfully, so most are denied.
+        
         assertThat(allowed).isLessThanOrEqualTo(25);
-        assertThat(limiter.allow("a-different-tenant")).isTrue();   // other tenants unaffected
+        assertThat(limiter.allow("a-different-tenant")).isTrue();   
     }
 }

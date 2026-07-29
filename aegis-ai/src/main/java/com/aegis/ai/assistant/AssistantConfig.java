@@ -12,17 +12,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * The single "front door" ChatClient. One text box for the user; the model
- * orchestrates the conversation and decides which tools to call. Authority over
- * consequences stays in the tools (authz + human approval), not in the model.
- * Full advisor chain wraps every call: audit → guardrails → memory.
- */
 @Configuration
 public class AssistantConfig {
 
-    // Principled, general — NOT a pile of per-issue rules. Correct behaviour is the
-    // job of a capable model + code guardrails + evals, not an ever-growing prompt.
     private static final String ASSISTANT_SYSTEM_PROMPT = """
             You are Achu FinBot, a copilot for bank operations staff. Decide what to do
             yourself; never ask the user which tool to use.
@@ -53,13 +45,10 @@ public class AssistantConfig {
                                @Value("${aegis.llm.think:}") String think) {
         builder.defaultSystem(ASSISTANT_SYSTEM_PROMPT)
                 .defaultAdvisors(
-                        tokenAudit,                                  // order 0
-                        guardrails,                                  // order 10
+                        tokenAudit,                                  
+                        guardrails,                                  
                         MessageChatMemoryAdvisor.builder(chatMemory).build());
-        // Ollama-only knob, set ONLY by profiles that opt in (e.g. qwen35): a thinking
-        // model reasons before every step of a tool call, multiplying latency for no
-        // measured accuracy gain on our eval — think:false restores direct answers.
-        // Left unset for openai/anthropic profiles, which must not see Ollama options.
+
         if (!think.isBlank()) {
             builder.defaultOptions(OllamaChatOptions.builder()
                     .thinkOption(new ThinkOption.ThinkBoolean(Boolean.parseBoolean(think)))

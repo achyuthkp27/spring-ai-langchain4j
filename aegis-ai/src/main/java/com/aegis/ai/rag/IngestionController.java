@@ -6,7 +6,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
-/** Admin trigger to (re)ingest the bundled tenant documents into pgvector. */
 @RestController
 @RequestMapping("/api/admin/ingest")
 public class IngestionController {

@@ -14,23 +14,12 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
 
-/**
- * In-memory audit trail powering the admin dashboard. Every assistant request is
- * recorded with its OUTCOME (llm / cache / the specific guardrail that blocked it /
- * error), latency and sizing, plus every tool invocation. Bounded ring buffer —
- * recent forensics, not long-term storage (production would ship these events to a
- * log pipeline; the aggregate counters live on in Micrometer regardless).
- *
- * Privacy: the question preview stored here must ALREADY be PII-redacted by the
- * caller — the admin UI renders it verbatim.
- */
 @Component
 public class AuditTrail {
 
     public static final int MAX_EVENTS = 2000;
     private static final int PREVIEW_CHARS = 140;
 
-    /** One assistant request, as the admin sees it. */
     public record Event(Instant at, String tenant, String user, String conversationId,
                         String source, long elapsedMs, int answerChars, String question) {
     }
@@ -54,7 +43,6 @@ public class AuditTrail {
         }
     }
 
-    /** Called from inside the tools so the dashboard shows which capabilities are used. */
     public void toolCalled(String tool, String tenant) {
         toolCalls.computeIfAbsent(tool + "|" + tenant, k -> new LongAdder()).increment();
     }
@@ -78,7 +66,6 @@ public class AuditTrail {
         return out;
     }
 
-    /** {tool -> {tenant -> count}} for the dashboard's capability breakdown. */
     public Map<String, Map<String, Long>> toolUsage() {
         Map<String, Map<String, Long>> out = new TreeMap<>();
         toolCalls.forEach((key, v) -> {
@@ -89,7 +76,6 @@ public class AuditTrail {
         return out;
     }
 
-    /** Latency stats (ms) over the retained window, per source and overall. */
     public Map<String, Map<String, Long>> latency() {
         Map<String, List<Long>> samples = new TreeMap<>();
         for (Event e : events) {
@@ -110,7 +96,6 @@ public class AuditTrail {
         return out;
     }
 
-    /** Per-minute buckets over the last {@code minutes}, oldest first, for the traffic chart. */
     public List<Map<String, Object>> timeseries(int minutes) {
         Instant cutoff = Instant.now().minus(minutes, ChronoUnit.MINUTES).truncatedTo(ChronoUnit.MINUTES);
         Map<Instant, Map<String, Long>> buckets = new TreeMap<>();

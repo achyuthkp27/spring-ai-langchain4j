@@ -5,11 +5,6 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * The cache-poisoning fix (Bug 1): context-dependent and short inputs must never be
- * cached, so a later unrelated "yes" can't be served a previous answer.
- * Uses a null embedding model — isCacheable is pure text logic, no embedding needed.
- */
 class SemanticCacheGuardTest {
 
     private final SemanticCache cache = new SemanticCache(null);

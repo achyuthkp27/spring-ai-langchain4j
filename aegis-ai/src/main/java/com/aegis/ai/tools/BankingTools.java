@@ -12,25 +12,14 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 
-/**
- * Tools the copilot/agent can call. Two security invariants, both enforced in code
- * (not by prompt):
- *   1. The Principal flows via ToolContext — the model never sees or sets it.
- *   2. Authorization is checked INSIDE every tool. Excessive agency (OWASP LLM06)
- *      is structurally impossible: the model can *request* money movement, but the
- *      tool only ever creates a human-approval request — it never moves money.
- */
 @Component
 public class BankingTools {
 
     private static final Logger log = LoggerFactory.getLogger(BankingTools.class);
     public static final String PRINCIPAL_KEY = "principal";
-    /** A caller can pass an AtomicBoolean here; it's flipped true whenever any
-        account/action tool runs, so those (dynamic) answers are never cached. */
+    
     public static final String DYNAMIC_ACCESS_KEY = "dynamicAccess";
-    /** Optional Consumer&lt;String&gt;: tools report human-readable progress ("Looking up
-        balance…") that the streaming endpoint forwards as SSE status events, so the
-        user sees what is happening during the multi-second tool phase. */
+    
     public static final String STATUS_KEY = "statusSink";
 
     @SuppressWarnings("unchecked")
@@ -49,8 +38,7 @@ public class BankingTools {
     }
 
     private Principal principal(ToolContext ctx) {
-        // Any banking tool touching account/action data marks the request dynamic,
-        // so the assistant will not cache its answer (balances change, are per-user).
+
         if (ctx.getContext().get(DYNAMIC_ACCESS_KEY) instanceof java.util.concurrent.atomic.AtomicBoolean b) {
             b.set(true);
         }
@@ -112,8 +100,6 @@ public class BankingTools {
         audit.toolCalled("createDisputeCase", p.tenantId());
         status(ctx, "Opening a dispute case for " + transactionId + "…");
 
-        // Validate the transaction exists and belongs to this tenant BEFORE creating
-        // a case — never open a dispute against an unverified/foreign transaction id.
         var txn = banking.findTransaction(transactionId);
         if (txn == null) {
             log.warn("tool.createDisputeCase.reject user={} reason=txn_not_found txn={}", p.userId(), transactionId);
@@ -188,7 +174,7 @@ public class BankingTools {
         if (acct == null || !acct.tenantId().equals(p.tenantId())) {
             throw new AccessDeniedException("That card is not on an account you can access.");
         }
-        // Standard replacement fee per card-services policy; waivable by the approver.
+        
         var approval = banking.requestApproval("CARD-REPLACEMENT:" + cardId,
                 new BigDecimal("5.00"), p.userId());
         log.info("tool.requestCardReplacement user={} card={} approval={}", p.userId(), cardId,
@@ -225,7 +211,7 @@ public class BankingTools {
         require(p, "credit:request");
         audit.toolCalled("issueProvisionalCredit", p.tenantId());
         status(ctx, "Requesting provisional credit approval…");
-        // Human-in-the-loop: the model can REQUEST money movement, never EXECUTE it.
+        
         var approval = banking.requestApproval(caseId, new BigDecimal(amount), p.userId());
         log.info("tool.issueProvisionalCredit user={} case={} amount={} -> {} (approval {})",
                 p.userId(), caseId, amount, approval.status(), approval.approvalId());

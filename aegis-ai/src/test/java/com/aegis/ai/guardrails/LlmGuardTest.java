@@ -6,11 +6,6 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/**
- * LLM10 (Unbounded Consumption) resilience: once the model call keeps failing, the
- * circuit opens and new calls fail FAST instead of piling up — the property that keeps
- * the app responsive under the 1→100 stress test.
- */
 class LlmGuardTest {
 
     @Test
@@ -18,16 +13,13 @@ class LlmGuardTest {
     void circuitOpensAfterFailures() {
         var guard = new LlmGuard();
 
-        // Fill the sliding window (20) with failing calls.
         for (int i = 0; i < 20; i++) {
             assertThatThrownBy(() -> guard.call(() -> { throw new RuntimeException("ollama down"); }))
                     .isInstanceOf(LlmGuard.LlmUnavailableException.class);
         }
 
-        // The breaker should now be OPEN.
         assertThat(guard.circuitState()).isEqualTo("OPEN");
 
-        // A new call is rejected instantly (no supplier execution) with the friendly message.
         boolean[] ran = {false};
         assertThatThrownBy(() -> guard.call(() -> { ran[0] = true; return "should not run"; }))
                 .isInstanceOf(LlmGuard.LlmUnavailableException.class)

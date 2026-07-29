@@ -14,17 +14,9 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Phase 5 eval gate. A golden set of (question, grounding-context, answer) triples
- * is scored by an LLM-as-judge (RelevancyEvaluator). A prompt/model regression that
- * makes answers non-relevant to their context fails the build.
- *
- * Gated behind RUN_EVAL_TESTS=true because it needs a live model (Ollama). In CI
- * this runs against a pinned judge model; locally it's opt-in.
- */
 @SpringBootTest(properties = {
         "spring.docker.compose.enabled=false",
-        "spring.datasource.url=jdbc:postgresql://localhost:5432/aegis",
+        "spring.datasource.url=jdbc:postgresql:
         "spring.datasource.username=aegis",
         "spring.datasource.password=aegis"
 })
@@ -42,12 +34,6 @@ class RagEvaluationTest {
         return evaluator.evaluate(request);
     }
 
-    /**
-     * The critical property of an eval GATE is that it catches a bad answer.
-     * This is robust even to a weak local judge model — an obviously off-topic
-     * answer must not pass. (Relevant-answer pass-rate depends on judge strength;
-     * with a strong pinned judge like gpt-4o-mini you also assert the positive case.)
-     */
     @Test
     @DisplayName("Eval gate catches an answer that is not grounded in the context")
     void evalGateCatchesUngroundedAnswer() {

@@ -10,11 +10,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * Grounded RAG endpoint. Tenant isolation is enforced at retrieval time via a
- * server-side filter expression built from the authenticated tenant — NEVER from
- * user input. This is the mitigation for OWASP LLM08 (vector/embedding weaknesses).
- */
 @RestController
 @RequestMapping("/api/rag")
 public class RagController {
@@ -36,14 +31,13 @@ public class RagController {
 
     @PostMapping("/ask")
     public AskResponse ask(@RequestBody AskRequest request) {
-        // Tenant comes from the verified JWT claim, never from user input.
+        
         String tenantId = CurrentUser.get().tenantId();
         var qaAdvisor = QuestionAnswerAdvisor.builder(vectorStore)
                 .searchRequest(SearchRequest.builder()
                         .topK(6)
                         // Local embedding models (nomic) score lower than hosted ones;
-                        // a lenient threshold improves recall. Tenant isolation is
-                        // unaffected — the filter is a hard SQL WHERE, not a similarity knob.
+
                         .similarityThreshold(0.1)
                         .filterExpression("tenantId == '" + tenantId + "'")
                         .build())

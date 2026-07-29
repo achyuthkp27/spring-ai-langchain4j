@@ -6,10 +6,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * Per-tenant token budget (OWASP LLM10: Unbounded Consumption). Denies a request
- * once a tenant exceeds its quota BEFORE spending money on the model call.
- */
 @Component
 public class BudgetGuard {
 
@@ -21,9 +17,6 @@ public class BudgetGuard {
 
     private static final long DEFAULT_BUDGET = 100_000;
 
-    /** Consumption is tracked per UTC day — the budget is a DAILY quota. Without a
-        window, a tenant that ever crossed the limit stayed locked out until a
-        restart or a manual budget bump. */
     private record Window(long epochDay, AtomicLong used) {
     }
 

@@ -21,13 +21,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
-/**
- * Admin analytics API — everything a chatbot operator needs in one place:
- * traffic and outcomes, latency percentiles, token spend per tenant/model,
- * guardrail activity, tool usage, conversation transcripts, RAG corpus state,
- * budget and circuit status. Secured: /api/admin/** requires the admin role
- * (see SecurityConfig).
- */
 @RestController
 @RequestMapping("/api/admin")
 public class AdminController {
@@ -52,7 +45,6 @@ public class AdminController {
         this.chatModel = chatModel;
     }
 
-    /** Headline tiles + per-tenant/per-model spend + guardrail state, in one call. */
     @GetMapping("/overview")
     public Map<String, Object> overview() {
         Map<String, Long> sources = audit.countsBySource();
@@ -62,7 +54,6 @@ public class AdminController {
         long blocked = sources.entrySet().stream()
                 .filter(e -> e.getKey().startsWith("blocked")).mapToLong(Map.Entry::getValue).sum();
 
-        // Real token counts (from model usage metadata) per tenant+model via Micrometer.
         List<Map<String, Object>> spend = new ArrayList<>();
         meters.find("aegis.ai.tokens.total").counters().forEach(c -> spend.add(Map.of(
                 "tenant", String.valueOf(c.getId().getTag("tenant")),
@@ -91,19 +82,16 @@ public class AdminController {
         return out;
     }
 
-    /** Recent audit events (question previews are PII-redacted before storage). */
     @GetMapping("/events")
     public List<AuditTrail.Event> events(@RequestParam(defaultValue = "100") int limit) {
         return audit.recent(Math.min(limit, AuditTrail.MAX_EVENTS));
     }
 
-    /** Per-minute traffic buckets for the dashboard chart. */
     @GetMapping("/timeseries")
     public List<Map<String, Object>> timeseries(@RequestParam(defaultValue = "60") int minutes) {
         return audit.timeseries(Math.min(Math.max(minutes, 5), 24 * 60));
     }
 
-    /** Conversations from the JDBC chat memory, most recently active first. */
     @GetMapping("/conversations")
     public List<Map<String, Object>> conversations(@RequestParam(defaultValue = "50") int limit) {
         return jdbc.query("""
@@ -111,7 +99,7 @@ public class AdminController {
                 FROM spring_ai_chat_memory GROUP BY conversation_id
                 ORDER BY last_at DESC LIMIT ?""",
                 (rs, i) -> {
-                    // memory keys are tenant:user:conversationId (see AssistantController)
+                    
                     String id = rs.getString("conversation_id");
                     String[] parts = id.split(":", 3);
                     Map<String, Object> m = new LinkedHashMap<>();
@@ -125,7 +113,6 @@ public class AdminController {
                 }, limit);
     }
 
-    /** Full transcript of one conversation (admin visibility into what the bot said). */
     @GetMapping("/conversations/{id}/messages")
     public List<Map<String, Object>> transcript(@PathVariable String id) {
         return jdbc.query("""
@@ -140,7 +127,6 @@ public class AdminController {
                 }, id);
     }
 
-    /** RAG corpus state: how many chunks each tenant has in the vector store. */
     @GetMapping("/rag")
     public List<Map<String, Object>> rag() {
         return jdbc.query("""
@@ -156,7 +142,6 @@ public class AdminController {
                 });
     }
 
-    /** Invalidate the semantic cache (e.g. after a policy change), all tenants or one. */
     @PostMapping("/cache/clear")
     public Map<String, Object> clearCache(@RequestParam(required = false) String tenant) {
         if (tenant == null || tenant.isBlank()) semanticCache.clear();

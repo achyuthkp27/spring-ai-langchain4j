@@ -7,11 +7,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
-/**
- * DEV-ONLY token issuer. In production this is your external IdP / OAuth2 authorization
- * server; the app only ever *validates* tokens (JwtService.parse), never mints them.
- * Exposed here so the UI/tests can obtain a signed token to demonstrate real auth.
- */
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {

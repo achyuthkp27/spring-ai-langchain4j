@@ -2,7 +2,6 @@ package com.aegis.ai.security;
 
 import org.springframework.security.core.context.SecurityContextHolder;
 
-/** Convenience accessor for the authenticated Principal set by the JWT filter. */
 public final class CurrentUser {
 
     private CurrentUser() {

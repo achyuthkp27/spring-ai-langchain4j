@@ -9,7 +9,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-/** In-memory banking domain stand-in so the agent has real state to act on. */
 @Service
 public class BankingService {
 
@@ -70,7 +69,6 @@ public class BankingService {
         return txns.getOrDefault(accountId, List.of());
     }
 
-    /** Find a transaction by id across all accounts (returns null if it doesn't exist). */
     public Transaction findTransaction(String transactionId) {
         return txns.values().stream()
                 .flatMap(List::stream)
@@ -90,7 +88,6 @@ public class BankingService {
         return cards.get(cardId);
     }
 
-    /** Protective action — immediate, reversible by staff, always audited by the caller. */
     public Card freezeCard(String cardId) {
         return cards.computeIfPresent(cardId, (k, c) ->
                 new Card(c.cardId(), c.accountId(), c.type(), c.last4(), "FROZEN"));

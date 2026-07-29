@@ -10,15 +10,6 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.stereotype.Component;
 
-/**
- * The Achu FinBot guardrail chain, condensed into one ordered advisor for the demo:
- *   1. Budget check (LLM10) — deny before spending if the tenant is over quota.
- *   2. Injection screen (LLM01) — refuse override/exfiltration attempts.
- *   3. PII redaction (LLM02) — mask sensitive data before it reaches the model.
- * Runs after TokenAuditAdvisor (order 0); this sits at order 10.
- *
- * Tenant id is read from advisor params (key "tenantId"); absent → "default".
- */
 @Component
 public class GuardrailAdvisor implements CallAdvisor {
 
@@ -43,13 +34,11 @@ public class GuardrailAdvisor implements CallAdvisor {
     public ChatClientResponse adviseCall(ChatClientRequest request, CallAdvisorChain chain) {
         String tenant = tenantOf(request);
 
-        // 0. Rate limit (LLM10) — cheap first gate, before any spend.
         if (!rateLimiter.allow(tenant)) {
             log.warn("guardrail.ratelimit.denied tenant={}", tenant);
             return refusal(request, "You're sending requests too quickly. Please slow down and retry.");
         }
 
-        // 1. Budget (LLM10)
         try {
             budget.checkOrThrow(tenant);
         } catch (BudgetGuard.BudgetExceededException e) {
@@ -59,14 +48,12 @@ public class GuardrailAdvisor implements CallAdvisor {
 
         String userText = lastUserText(request);
 
-        // 2. Injection screen (LLM01)
         var screen = injection.screen(userText);
         if (screen.flagged()) {
             log.warn("guardrail.injection.blocked tenant={} pattern='{}'", tenant, screen.matched());
             return refusal(request, REFUSAL + " (suspected prompt injection)");
         }
 
-        // 3. PII redaction (LLM02) — rewrite the user message before egress
         String redacted = pii.redact(userText);
         ChatClientRequest effective = request;
         if (!redacted.equals(userText)) {
@@ -78,24 +65,21 @@ public class GuardrailAdvisor implements CallAdvisor {
 
         ChatClientResponse response = chain.nextCall(effective);
 
-        // Record usage against the budget for next time.
         var cr = response.chatResponse();
         if (cr != null && cr.getMetadata() != null && cr.getMetadata().getUsage() != null) {
             budget.record(tenant, cr.getMetadata().getUsage().getTotalTokens());
         }
 
-        // OUTPUT GUARDRAILS (moderation on what the MODEL said, not just the user).
         if (cr != null && cr.getResult() != null && cr.getResult().getOutput() != null) {
             String out = cr.getResult().getOutput().getText();
 
-            // a) Weak models sometimes emit a tool call as plain text — suppress it.
             if (looksLikeLeakedToolCall(out)) {
                 log.warn("guardrail.output.leaked_tool_call tenant={} suppressed", tenant);
                 return refusal(request,
                         "I wasn't able to complete that action just now. Could you rephrase, "
                         + "or ask me a specific question about a policy, account, or dispute?");
             }
-            // b) Redact any PII the model itself produced (defence-in-depth on egress).
+            
             String redactedOut = pii.redact(out);
             if (!redactedOut.equals(out)) {
                 log.warn("guardrail.output.pii_redacted tenant={}", tenant);
@@ -105,14 +89,13 @@ public class GuardrailAdvisor implements CallAdvisor {
         return response;
     }
 
-    /** True when the model's answer is (mostly) a raw tool-call JSON blob. */
     public static boolean looksLikeLeakedToolCall(String text) {
         if (text == null) return false;
         String t = text.trim();
         if (!t.contains("{") || !t.contains("}")) return false;
         boolean hasName = t.contains("\"name\"");
         boolean hasArgs = t.contains("\"parameters\"") || t.contains("\"arguments\"");
-        // JSON-ish object mentioning a call shape, and no substantial prose around it.
+        
         return hasName && hasArgs;
     }
 
