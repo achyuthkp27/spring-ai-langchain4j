@@ -17,7 +17,7 @@ public class CacheConfig {
     @ConditionalOnProperty(prefix = "spring.ai.model", name = "embedding",
             havingValue = "ollama", matchIfMissing = true)
     SemanticCache ollamaSemanticCache(
-            @Value("${spring.ai.ollama.base-url:http:
+            @Value("${spring.ai.ollama.base-url:http://localhost:11434}") String baseUrl,
             @Value("${aegis.cache.embedding-model:all-minilm}") String cacheModel) {
 
         OllamaApi api = OllamaApi.builder().baseUrl(baseUrl).build();

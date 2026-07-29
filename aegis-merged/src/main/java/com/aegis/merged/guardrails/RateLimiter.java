@@ -1,6 +1,8 @@
 package com.aegis.merged.guardrails;
 
 import com.github.benmanes.caffeine.cache.Caffeine;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -16,6 +18,7 @@ import java.util.concurrent.ConcurrentMap;
 @Component
 public class RateLimiter {
 
+    private static final Logger log = LoggerFactory.getLogger(RateLimiter.class);
     private static final long TTL_SECONDS = 3600;
 
     private final double userCapacity;
@@ -97,9 +100,14 @@ public class RateLimiter {
     }
 
     private boolean allowRedis(String key, double capacity, double refillPerSec) {
-        Long allowed = redis.get().execute(SCRIPT, List.of(key),
-                String.valueOf(capacity), String.valueOf(refillPerSec), String.valueOf(TTL_SECONDS));
-        return allowed != null && allowed == 1L;
+        try {
+            Long allowed = redis.get().execute(SCRIPT, List.of(key),
+                    String.valueOf(capacity), String.valueOf(refillPerSec), String.valueOf(TTL_SECONDS));
+            return allowed != null && allowed == 1L;
+        } catch (Exception e) {
+            log.warn("ratelimit.redis.failed fail-open-to-local key={} err={}", key, e.toString());
+            return allowLocal(key, capacity, refillPerSec);
+        }
     }
 
     private boolean allowLocal(String key, double capacity, double refillPerSec) {

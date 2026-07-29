@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(properties = {
         "spring.docker.compose.enabled=false",
-        "spring.datasource.url=jdbc:postgresql:
+        "spring.datasource.url=jdbc:postgresql://localhost:5432/aegis",
         "spring.datasource.username=aegis",
         "spring.datasource.password=aegis"
 })

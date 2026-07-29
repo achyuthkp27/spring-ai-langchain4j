@@ -2,10 +2,15 @@ package com.aegis.merged.guardrails;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class RateLimiterTest {
 
@@ -54,5 +59,20 @@ class RateLimiterTest {
         for (int i = 0; i < 5; i++) if (limiter.allow("t", "user-b")) userBSuccesses++;
 
         assertThat(userBSuccesses).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("A Redis failure degrades to the local bucket instead of failing the request")
+    void redisFailureFallsBackToLocal() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        when(redisTemplate.execute(any(RedisScript.class), any(java.util.List.class), any(), any(), any()))
+                .thenThrow(new RuntimeException("connection refused"));
+
+        var limiter = new RateLimiter(Optional.of(redisTemplate), 5, 1.0, 200, 10.0);
+
+        for (int i = 0; i < 5; i++) {
+            assertThat(limiter.allow("achu-bank", "u1")).isTrue();
+        }
+        assertThat(limiter.allow("achu-bank", "u1")).isFalse();
     }
 }
