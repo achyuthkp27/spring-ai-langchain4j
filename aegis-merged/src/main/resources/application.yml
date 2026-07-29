@@ -146,6 +146,14 @@ spring:
 logging:
   level:
     org.springframework.ai.chat.client.advisor: DEBUG
+aegis:
+  router:
+    # Local dev only: keeps every turn on the base qwen3.5:4b model, never the
+    # 9b escalation tier, so this instance never needs two chat models resident
+    # in Ollama at once. Trades away escalated depth on complex queries for
+    # consistent local latency and eliminates the 4b/9b VRAM-swap contention
+    # that caused first-token timeouts under concurrent local traffic.
+    enabled: false
 
 ---
 spring:
