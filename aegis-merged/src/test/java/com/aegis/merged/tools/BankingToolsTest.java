@@ -215,15 +215,36 @@ class BankingToolsTest {
     @Test
     @DisplayName("setCardSpendingLimit rejects a negative limit")
     void spendingLimitRejectsNegative() {
-        String result = tools.setCardSpendingLimit("CRD-7001", "-100", ctxFor(demoUser));
+        String result = tools.setCardSpendingLimit("CRD-7001", "-100", null, ctxFor(demoUser));
         assertThat(result).containsIgnoringCase("positive");
     }
 
     @Test
     @DisplayName("toggleMerchantCategoryBlock rejects an unknown category")
     void merchantCategoryRejectsUnknownValue() {
-        String result = tools.toggleMerchantCategoryBlock("CRD-7001", "NOT_A_REAL_CATEGORY", true, ctxFor(demoUser));
+        String result = tools.toggleMerchantCategoryBlock("CRD-7001", "NOT_A_REAL_CATEGORY", true, null, ctxFor(demoUser));
         assertThat(result).containsIgnoringCase("unknown");
+    }
+
+    @Test
+    @DisplayName("setCardSpendingLimit requires confirmation before taking effect")
+    void spendingLimitRequiresConfirmation() {
+        String pending = tools.setCardSpendingLimit("CRD-7001", "500", null, ctxFor(demoUser));
+        assertThat(pending).startsWith("CONFIRMATION_REQUIRED");
+
+        String confirmed = tools.setCardSpendingLimit("CRD-7001", "500", extractToken(pending), ctxFor(demoUser));
+        assertThat(confirmed).contains("$500");
+    }
+
+    @Test
+    @DisplayName("toggleMerchantCategoryBlock requires confirmation before taking effect")
+    void merchantCategoryBlockRequiresConfirmation() {
+        String pending = tools.toggleMerchantCategoryBlock("CRD-7001", "GAMBLING", true, null, ctxFor(demoUser));
+        assertThat(pending).startsWith("CONFIRMATION_REQUIRED");
+
+        String confirmed = tools.toggleMerchantCategoryBlock(
+                "CRD-7001", "GAMBLING", true, extractToken(pending), ctxFor(demoUser));
+        assertThat(confirmed).containsIgnoringCase("now blocks");
     }
 
     @Test
@@ -240,5 +261,22 @@ class BankingToolsTest {
                 .containsIgnoringCase("past");
         assertThat(tools.setTravelNotice("9999-12-31", "Nowhere", ctxFor(demoUser)))
                 .containsIgnoringCase("days out");
+    }
+
+    @Test
+    @DisplayName("getSpendingSummary sums only debits into category totals — a refund/credit in "
+            + "the same category must not inflate it")
+    void spendingSummaryDoesNotMixCreditsIntoCategoryTotals() {
+        BankingService banking = new BankingService();
+        banking.transfer("ACC-1001", "ACC-1002", new java.math.BigDecimal("100.00"), "test-out");
+        banking.transfer("ACC-1002", "ACC-1001", new java.math.BigDecimal("100.00"), "test-in");
+
+        var freshTools = new BankingTools(banking, new AuditTrail(mock(JdbcTemplate.class)),
+                new com.aegis.merged.kyc.MockKycProvider(), new ConfirmationGuard());
+
+        String result = freshTools.getSpendingSummary("ACC-1001", ctxFor(demoUser));
+
+        assertThat(result).contains("Transfers: $100.00");
+        assertThat(result).doesNotContain("Transfers: $200.00");
     }
 }

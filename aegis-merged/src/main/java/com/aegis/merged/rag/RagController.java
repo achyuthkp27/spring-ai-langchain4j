@@ -1,5 +1,6 @@
 package com.aegis.merged.rag;
 
+import com.aegis.merged.assistant.ChatInputValidation;
 import com.aegis.merged.guardrails.GuardrailAdvisor;
 import com.aegis.merged.security.CurrentUser;
 import org.springframework.ai.chat.client.ChatClient;
@@ -29,9 +30,8 @@ public class RagController {
 
     public record AskRequest(String conversationId, String question) {
         public AskRequest {
-            if (conversationId == null || conversationId.isBlank()) {
-                conversationId = "default";
-            }
+            conversationId = ChatInputValidation.normalizeAndValidateConversationId(conversationId);
+            ChatInputValidation.validateMessage(question);
         }
     }
 

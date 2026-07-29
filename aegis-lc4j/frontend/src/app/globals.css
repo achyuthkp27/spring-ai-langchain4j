@@ -2,86 +2,144 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ============================================================================
+   Achu FinBot — design tokens
+
+   Dark is the designed mode: a near-black canvas with a periwinkle accent and
+   a single light bloom behind the brand mark. Light is a tuned counterpart,
+   not an inversion.
+
+   Three tiers per semantic family:
+     --x         base hue      — icons, chart fills, rails. Bar: 3:1 on surface.
+     --x-soft    tinted fill   — badge/pill backgrounds. Never carries text.
+     --x-ink     on-soft text  — the ONLY value allowed as text on --x-soft.
+   Every -ink/-soft pair is >= 5.5:1 in both modes. Do not use --x as a text
+   color on --x-soft; that pairing is what this tier exists to prevent.
+   ========================================================================= */
+
 :root {
-  --background: #f7f8fa;
-  --foreground: #16181d;
+  --background: #f6f7fb;
   --surface: #ffffff;
-  --surface-2: #eef0f4;
-  --border: #e2e5ea;
-  --accent: #2563eb;
-  --accent-soft: #dbeafe;
-  --muted: #6b7280;
-  /* System-side identity tint (escalation/reasoning) — distinct from --accent (the
-     user's own messages). Close to accent under deuteranopia by hue math alone, so it's
-     ALWAYS paired with a distinct icon + label (Sparkles vs Loader2, different status
-     text), per the dataviz skill's rule for colors that share a status/identity role:
-     never color alone. */
-  --system: #7c3aed;
-  --system-soft: #ede9fe;
-  /* Fixed status palette (validated via dataviz skill's validate_palette.js against
-     this app's surfaces) — same hex in both modes by design, not themed. On the light
-     surface "warning" is intentionally sub-3:1 as text; only ever used as an ICON color
-     paired with muted-ink text + a text label, never as the text color itself. */
-  --good: #0ca30c;
-  --good-soft: #d1fae5;
-  --warning: #fab219;
-  --warning-soft: #fef3c7;
-  --critical: #d03b3b;
-  --critical-soft: #fee2e2;
-  /* Soft pastel page wash + frosted pill surface — the warm, colorful reference direction
-     (vs. the earlier flat-monochrome pass): a gentle lavender-to-blue gradient behind
-     everything, with nav/search/composer sitting as translucent "pill" surfaces on top
-     rather than opaque cards. */
-  --wash-a: #e9e6fb;
-  --wash-b: #e3edfb;
-  --pill: rgba(255, 255, 255, 0.55);
-  --pill-border: rgba(255, 255, 255, 0.6);
+  --surface-2: #eef0f6;
+  --elevated: #ffffff;
+  --foreground: #14161c;
+  --muted: #5c6478;
+  --border: #e3e6ef;
+  --hairline: rgba(20, 22, 28, 0.08);
+
+  --accent: #6366f1;
+  --accent-soft: #e6e7fd;
+  --accent-ink: #4442d6;
+
+  --system: #8b5cf6;
+  --system-soft: #eee8fd;
+  --system-ink: #6127c9;
+
+  --good: #12a25c;
+  --good-soft: #dcf5e7;
+  --good-ink: #10693d;
+
+  --warning: #c2820a;
+  --warning-soft: #fdf0d5;
+  --warning-ink: #7c4a03;
+
+  --critical: #d64545;
+  --critical-soft: #fde4e4;
+  --critical-ink: #b31f1f;
+
+  --glow-a: rgba(99, 102, 241, 0.22);
+  --glow-b: rgba(139, 92, 246, 0.14);
+  --sheen: rgba(255, 255, 255, 0.7);
+  --pill: rgba(255, 255, 255, 0.72);
+  --pill-border: rgba(20, 22, 28, 0.07);
+  --scrim: rgba(20, 22, 28, 0.45);
+  --ring: rgba(99, 102, 241, 0.55);
 }
 
 .dark {
-  --background: #0b0e14;
-  --foreground: #e8eaf0;
-  --surface: #131722;
-  --surface-2: #1b2130;
-  --border: #262d3d;
-  --accent: #60a5fa;
-  --accent-soft: #1e3a5f;
-  --muted: #8b93a3;
-  --system: #c4b5fd;
-  --system-soft: #2e1f4d;
-  --good: #0ca30c;
-  --good-soft: #123528;
-  --warning: #fab219;
-  --warning-soft: #3d2c0c;
-  --critical: #d03b3b;
-  --critical-soft: #3d1414;
-  --wash-a: #241c3d;
-  --wash-b: #16233a;
-  --pill: rgba(255, 255, 255, 0.06);
-  --pill-border: rgba(255, 255, 255, 0.09);
+  --background: #08090c;
+  --surface: #0f1117;
+  --surface-2: #161922;
+  --elevated: #171b25;
+  --foreground: #e9ecf5;
+  --muted: #97a0b5;
+  --border: #1e2230;
+  --hairline: rgba(255, 255, 255, 0.07);
+
+  --accent: #8b9cff;
+  --accent-soft: #1c2140;
+  --accent-ink: #a5b2ff;
+
+  --system: #a78bfa;
+  --system-soft: #251c40;
+  --system-ink: #c3aeff;
+
+  --good: #34d399;
+  --good-soft: #10291f;
+  --good-ink: #5ee49b;
+
+  --warning: #fbbf24;
+  --warning-soft: #2e2410;
+  --warning-ink: #f7c24d;
+
+  --critical: #f87171;
+  --critical-soft: #331717;
+  --critical-ink: #ff8f8f;
+
+  --glow-a: rgba(139, 156, 255, 0.28);
+  --glow-b: rgba(167, 139, 250, 0.18);
+  --sheen: rgba(255, 255, 255, 0.06);
+  --pill: rgba(255, 255, 255, 0.045);
+  --pill-border: rgba(255, 255, 255, 0.08);
+  --scrim: rgba(0, 0, 0, 0.66);
+  --ring: rgba(139, 156, 255, 0.65);
 }
 
 @theme inline {
   --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-elevated: var(--elevated);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
   --color-border-soft: var(--border);
+  --color-hairline: var(--hairline);
+
   --color-accent: var(--accent);
   --color-accent-soft: var(--accent-soft);
-  --color-muted: var(--muted);
+  --color-accent-ink: var(--accent-ink);
+
   --color-system: var(--system);
   --color-system-soft: var(--system-soft);
+  --color-system-ink: var(--system-ink);
+
   --color-good: var(--good);
   --color-good-soft: var(--good-soft);
+  --color-good-ink: var(--good-ink);
+
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
+  --color-warning-ink: var(--warning-ink);
+
   --color-critical: var(--critical);
   --color-critical-soft: var(--critical-soft);
+  --color-critical-ink: var(--critical-ink);
+
   --color-pill: var(--pill);
   --color-pill-border: var(--pill-border);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* One type scale. Reach for these before a bracket value. */
+  --text-micro: 0.6875rem;    /* 11px — kickers, timestamps, meta */
+  --text-micro--line-height: 1.35;
+  --text-label: 0.8125rem;    /* 13px — labels, secondary body */
+  --text-label--line-height: 1.45;
+  --text-body: 0.9375rem;     /* 15px — chat body */
+  --text-body--line-height: 1.6;
+  --text-figure: 1.375rem;    /* 22px — the one "big number", chat + admin */
+  --text-figure--line-height: 1.2;
 }
 
 html,
@@ -90,32 +148,129 @@ body {
 }
 
 body {
-  background: linear-gradient(135deg, var(--wash-a), var(--wash-b));
-  background-attachment: fixed;
+  background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
-  /* Smooth cross-fade on theme toggle instead of an instant flip. */
-  transition: background-color 0.2s ease, color 0.2s ease;
+  text-rendering: optimizeLegibility;
 }
 
-/* Tight, precise heading tracking — the one typographic signature that reads as
-   "engineered" rather than "templated" (Linear/Vercel's shared trait). */
-h1, h2, h3 {
-  letter-spacing: -0.01em;
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
 }
 
-/* Streaming caret */
-.caret::after {
+/* ---------------------------------------------------------------------------
+   Ambient canvas: one soft bloom top-center plus a fine grain. Fixed and
+   pointer-transparent so it never enters hit-testing or scrolls with content.
+   ------------------------------------------------------------------------ */
+.canvas-bloom {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(60rem 34rem at 50% -12%, var(--glow-a), transparent 62%),
+    radial-gradient(44rem 28rem at 82% 8%, var(--glow-b), transparent 68%);
+}
+
+.canvas-grain {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: radial-gradient(circle at 1px 1px, var(--hairline) 1px, transparent 0);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(70rem 44rem at 50% 0%, #000 0%, transparent 75%);
+}
+
+/* ---------------------------------------------------------------------------
+   Surfaces
+   ------------------------------------------------------------------------ */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 0.875rem;
+}
+
+.glass {
+  background: var(--pill);
+  border: 1px solid var(--pill-border);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+}
+
+/* Inner top highlight — the detail that separates "dark card" from "lit
+   surface". Sits above the fill, below content. */
+.lit {
+  position: relative;
+}
+.lit::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(180deg, var(--sheen), transparent 42%);
+  opacity: 0.55;
+}
+
+.hairline {
+  border: 1px solid var(--hairline);
+}
+
+/* ---------------------------------------------------------------------------
+   Brand mark glow — used by the splash, the hero, and the assistant avatar.
+   ------------------------------------------------------------------------ */
+.mark-glow {
+  filter: drop-shadow(0 0 14px var(--glow-a)) drop-shadow(0 0 44px var(--glow-b));
+}
+
+/* Horizontal lens streak bisecting the mark (see reference). */
+.mark-streak {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--glow-a) 22%,
+    var(--foreground) 50%,
+    var(--glow-a) 78%,
+    transparent
+  );
+  opacity: 0.5;
+  filter: blur(0.5px);
+}
+
+/* ---------------------------------------------------------------------------
+   Focus. One ring for the whole app — every interactive element inherits it
+   rather than opting in per component.
+   ------------------------------------------------------------------------ */
+:where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+/* ---------------------------------------------------------------------------
+   Streaming caret — pinned to the last inline child so it trails the final
+   glyph rather than landing after a block element.
+   ------------------------------------------------------------------------ */
+.caret > *:last-child::after {
   content: "";
   display: inline-block;
-  width: 0.55em;
+  width: 0.5em;
   height: 1.05em;
   margin-left: 2px;
   vertical-align: text-bottom;
-  background: var(--accent);
   border-radius: 1px;
-  animation: caret-blink 0.9s steps(1) infinite;
+  background: var(--accent);
+  animation: caret-blink 1s steps(1) infinite;
 }
 
 @keyframes caret-blink {
@@ -124,49 +279,183 @@ h1, h2, h3 {
   }
 }
 
-/* Markdown inside bubbles */
+/* ---------------------------------------------------------------------------
+   Splash
+   ------------------------------------------------------------------------ */
+@keyframes ignite {
+  0% {
+    transform: scale(0.72);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes streak-open {
+  0% {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  45% {
+    opacity: 1;
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 0.55;
+  }
+}
+
+@keyframes rise {
+  0% {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes sweep {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(110%);
+  }
+}
+
+.anim-ignite {
+  animation: ignite 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.anim-streak {
+  animation: streak-open 1100ms cubic-bezier(0.22, 1, 0.36, 1) 120ms both;
+}
+.anim-rise {
+  animation: rise 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.anim-sweep {
+  animation: sweep 1400ms cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   Markdown inside bubbles
+   ------------------------------------------------------------------------ */
 .prose-chat p {
-  margin: 0.35rem 0;
+  margin: 0.4rem 0;
+}
+.prose-chat > *:first-child {
+  margin-top: 0;
+}
+.prose-chat > *:last-child {
+  margin-bottom: 0;
 }
 .prose-chat ul,
 .prose-chat ol {
-  margin: 0.35rem 0 0.35rem 1.1rem;
+  margin: 0.4rem 0 0.4rem 1.1rem;
   list-style: disc;
 }
 .prose-chat ol {
   list-style: decimal;
 }
+.prose-chat li {
+  margin: 0.15rem 0;
+}
 .prose-chat code {
   background: var(--surface-2);
-  border-radius: 4px;
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
   padding: 0.1em 0.35em;
   font-family: var(--font-mono), monospace;
   font-size: 0.85em;
 }
 .prose-chat pre {
-  margin: 0.5rem 0;
-  padding: 0.75rem 0.9rem;
+  margin: 0.55rem 0;
+  padding: 0.8rem 0.95rem;
   background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
   overflow-x: auto;
 }
 .prose-chat pre code {
   background: none;
+  border: none;
   padding: 0;
   font-size: 0.82em;
-  line-height: 1.55;
+  line-height: 1.6;
 }
 .prose-chat blockquote {
-  margin: 0.4rem 0;
-  padding-left: 0.75rem;
+  margin: 0.45rem 0;
+  padding-left: 0.8rem;
   border-left: 2px solid var(--accent);
   color: var(--muted);
 }
 .prose-chat a {
-  color: var(--accent);
+  color: var(--accent-ink);
+  text-decoration: underline;
   text-underline-offset: 2px;
 }
 .prose-chat strong {
   font-weight: 600;
+  color: var(--foreground);
+}
+.prose-chat table {
+  width: 100%;
+  margin: 0.5rem 0;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+.prose-chat th,
+.prose-chat td {
+  border: 1px solid var(--hairline);
+  padding: 0.35rem 0.55rem;
+  text-align: left;
+}
+.prose-chat th {
+  background: var(--surface-2);
+  font-weight: 600;
+}
+
+.scroll-slim {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.scroll-slim::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-slim::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 99px;
+}
+.scroll-none {
+  scrollbar-width: none;
+}
+.scroll-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Reduced motion. Covers CSS keyframes here; components additionally read
+   framer-motion's useReducedMotion so springs collapse to instant.
+   ------------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .caret > *:last-child::after {
+    animation: none;
+    opacity: 1;
+  }
 }

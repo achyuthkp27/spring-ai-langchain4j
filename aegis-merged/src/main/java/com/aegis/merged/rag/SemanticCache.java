@@ -1,5 +1,6 @@
 package com.aegis.merged.rag;
 
+import com.aegis.merged.guardrails.LlmGuard;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -38,14 +39,20 @@ public class SemanticCache {
     private final Map<String, CopyOnWriteArrayList<Entry>> byTenant = new ConcurrentHashMap<>();
     private final EmbeddingModel embeddingModel;
     private final double similarityThreshold;
+    private final LlmGuard llmGuard;
 
     public SemanticCache(EmbeddingModel embeddingModel) {
         this(embeddingModel, 0.62);
     }
 
     public SemanticCache(EmbeddingModel embeddingModel, double similarityThreshold) {
+        this(embeddingModel, similarityThreshold, new LlmGuard());
+    }
+
+    public SemanticCache(EmbeddingModel embeddingModel, double similarityThreshold, LlmGuard llmGuard) {
         this.embeddingModel = embeddingModel;
         this.similarityThreshold = similarityThreshold;
+        this.llmGuard = llmGuard;
     }
 
     public record Hit(String answer, double similarity, String matchedQuestion) {
@@ -68,8 +75,8 @@ public class SemanticCache {
         if (entries == null || entries.isEmpty()) {
             return Optional.empty();
         }
-        entries.removeIf(Entry::expired);   
-        float[] q = embeddingModel.embed(question);
+        entries.removeIf(Entry::expired);
+        float[] q = llmGuard.call(() -> embeddingModel.embed(question));
         Entry best = null;
         double bestSim = -1;
         for (Entry e : entries) {
@@ -98,7 +105,8 @@ public class SemanticCache {
         if (entries.size() >= MAX_PER_TENANT) {
             entries.remove(0); 
         }
-        entries.add(new Entry(embeddingModel.embed(question), question, answer, Instant.now().plus(TTL)));
+        entries.add(new Entry(llmGuard.call(() -> embeddingModel.embed(question)),
+                question, answer, Instant.now().plus(TTL)));
     }
 
     public void clear() {

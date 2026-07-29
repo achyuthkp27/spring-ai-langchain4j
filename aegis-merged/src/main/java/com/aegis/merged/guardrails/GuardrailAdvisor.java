@@ -82,7 +82,8 @@ public class GuardrailAdvisor implements CallAdvisor {
         ChatClientResponse response = chain.nextCall(effective);
 
         var cr = response.chatResponse();
-        if (cr != null && cr.getMetadata() != null && cr.getMetadata().getUsage() != null) {
+        if (cr != null && cr.getMetadata() != null && cr.getMetadata().getUsage() != null
+                && cr.getMetadata().getUsage().getTotalTokens() != null) {
             budget.record(tenant, cr.getMetadata().getUsage().getTotalTokens());
         }
 

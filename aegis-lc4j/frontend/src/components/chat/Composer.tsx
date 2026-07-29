@@ -1,26 +1,37 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useImperativeHandle, useRef, useState } from "react";
 import clsx from "clsx";
-import { Plus, SendHorizonal, Square } from "lucide-react";
+import { ArrowUp, Plus, Square } from "lucide-react";
 
 const MAX_LENGTH = 4000;
 const COUNTER_THRESHOLD = 3500;
+const MAX_TEXTAREA_PX = 200;
+
+export interface ComposerHandle {
+  fill: (prompt: string) => void;
+}
 
 export function Composer({
   onSend,
   onNewChat,
   onStop,
   disabled,
+  inputRef,
 }: {
   onSend: (text: string) => void;
   onNewChat: () => void;
   onStop?: () => void;
   disabled: boolean;
+  inputRef?: React.RefObject<ComposerHandle | null>;
 }) {
   const [text, setText] = useState("");
-  const [focused, setFocused] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
+
+  const resize = (el: HTMLTextAreaElement) => {
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, MAX_TEXTAREA_PX)}px`;
+  };
 
   const submit = () => {
     const t = text.trim();
@@ -30,34 +41,37 @@ export function Composer({
     if (ref.current) ref.current.style.height = "auto";
   };
 
+  useImperativeHandle(inputRef, () => ({
+    fill: (prompt: string) => {
+      setText(prompt);
+      const el = ref.current;
+      if (!el) return;
+      el.focus();
+      requestAnimationFrame(() => resize(el));
+    },
+  }));
+
+  const showCounter = text.length >= COUNTER_THRESHOLD;
+
   return (
-    <div>
-      <div
-        className={clsx(
-          "flex items-end gap-2 rounded-full border bg-pill p-1.5 pl-2 backdrop-blur-sm transition-colors duration-150",
-          focused ? "border-accent/50" : "border-pill-border",
-        )}
-      >
-        <button
-          onClick={onNewChat}
-          aria-label="Start a new chat"
-          className="grid h-8 w-8 shrink-0 place-items-center self-center rounded-full bg-surface text-muted hover:text-foreground transition-colors"
-        >
-          <Plus size={16} />
-        </button>
+    <div
+      className="panel lit overflow-hidden rounded-2xl transition-colors duration-200 focus-within:border-accent/45"
+      style={{ boxShadow: "0 18px 44px -28px rgba(0,0,0,0.6)" }}
+    >
+      <label htmlFor="composer-input" className="sr-only">
+          Message Achu FinBot
+        </label>
         <textarea
+          id="composer-input"
           ref={ref}
           value={text}
           rows={1}
           maxLength={MAX_LENGTH}
-          placeholder="Chat here.."
-          className="flex-1 resize-none bg-transparent px-1 py-2 text-[15px] outline-none placeholder:text-muted max-h-40"
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          placeholder="Ask about your accounts, cards, disputes or our policies…"
+          className="scroll-slim block w-full resize-none bg-transparent px-4 pb-1 pt-3.5 text-body outline-none placeholder:text-muted"
           onChange={(e) => {
             setText(e.target.value);
-            e.target.style.height = "auto";
-            e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
+            resize(e.target);
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -66,31 +80,61 @@ export function Composer({
             }
           }}
         />
-        {disabled ? (
+
+        <div className="flex items-center gap-2 px-2.5 pb-2.5 pt-1">
           <button
-            onClick={onStop}
-            disabled={!onStop}
-            aria-label="Stop generating"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent text-white transition-opacity hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed"
+            type="button"
+            onClick={onNewChat}
+            aria-label="Start a new chat"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
           >
-            <Square size={13} />
+            <Plus size={17} />
           </button>
-        ) : (
-          <button
-            onClick={submit}
-            disabled={!text.trim()}
-            aria-label="Send"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent text-white transition-opacity hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <SendHorizonal size={15} />
-          </button>
-        )}
+
+          <span className="hidden min-w-0 flex-1 truncate pl-0.5 text-micro text-muted/80 sm:block">
+            Enter to send · Shift+Enter for a new line
+          </span>
+          <span className="flex-1 sm:hidden" />
+
+          {showCounter && (
+            <span
+              className={clsx(
+                "shrink-0 text-micro tabular-nums",
+                text.length >= MAX_LENGTH ? "text-critical-ink" : "text-muted",
+              )}
+              aria-live="polite"
+            >
+              {text.length}/{MAX_LENGTH}
+            </span>
+          )}
+
+          {disabled ? (
+            <button
+              type="button"
+              onClick={onStop}
+              disabled={!onStop}
+              aria-label="Stop generating"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-2 text-foreground transition-colors hover:bg-border-soft disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Square size={12} fill="currentColor" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={submit}
+              disabled={!text.trim()}
+              aria-label="Send message"
+              className={clsx(
+                "grid h-9 w-9 shrink-0 place-items-center rounded-full transition-all",
+                text.trim()
+                  ? "bg-accent text-background shadow-[0_0_20px_-4px_var(--glow-a)]"
+                  : "cursor-not-allowed bg-surface-2 text-muted",
+              )}
+            >
+              <ArrowUp size={17} strokeWidth={2.4} />
+            </button>
+          )}
       </div>
-      {text.length >= COUNTER_THRESHOLD && (
-        <p className="mt-1 text-right text-[11px] text-muted">
-          {text.length}/{MAX_LENGTH}
-        </p>
-      )}
     </div>
   );
 }

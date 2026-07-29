@@ -25,8 +25,14 @@ class ConfirmationGuardTest {
     void aTokenDoesNotConfirmDifferentArguments() {
         String token = guard.issue("u1", "freezeCard", "CRD-7001");
         assertThat(guard.verify(token, "u1", "freezeCard", "CRD-7002")).isFalse();
+    }
 
-        assertThat(guard.verify(token, "u1", "freezeCard", "CRD-7001")).isTrue();
+    @Test
+    void aMismatchedVerifyAttemptBurnsTheTokenLikeTheRedisPathDoes() {
+        String token = guard.issue("u1", "freezeCard", "CRD-7001");
+        assertThat(guard.verify(token, "u1", "freezeCard", "CRD-7002")).isFalse();
+
+        assertThat(guard.verify(token, "u1", "freezeCard", "CRD-7001")).isFalse();
     }
 
     @Test

@@ -43,7 +43,7 @@ export interface ChatState {
 let nextId = 0;
 const id = () => `m${++nextId}`;
 
-function mergeById<T, K>(existing: T[] | undefined, incoming: T[], keyOf: (t: T) => K): T[] {
+export function mergeById<T, K>(existing: T[] | undefined, incoming: T[], keyOf: (t: T) => K): T[] {
   const byId = new Map((existing ?? []).map((t) => [keyOf(t), t]));
   incoming.forEach((t) => byId.set(keyOf(t), t));
   return [...byId.values()];

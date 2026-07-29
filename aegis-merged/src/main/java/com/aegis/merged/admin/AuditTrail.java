@@ -189,7 +189,10 @@ public class AuditTrail {
         });
     }
 
-    public record ChainVerification(boolean valid, long rowsChecked, long legacyRowsSkipped, Long brokenAtId) {
+    private static final String GENESIS = "GENESIS";
+
+    public record ChainVerification(boolean valid, long rowsChecked, long legacyRowsSkipped,
+                                    Long brokenAtId, boolean chainHeadMissing) {
     }
 
     public ChainVerification verifyChain() {
@@ -198,6 +201,7 @@ public class AuditTrail {
         AtomicLong legacyRowsSkipped = new AtomicLong();
         AtomicReference<String> expectedPrev = new AtomicReference<>();
         AtomicReference<Long> brokenAtId = new AtomicReference<>();
+        AtomicBoolean chainHeadMissing = new AtomicBoolean(false);
 
         jdbc.query("""
                 SELECT id, tenant, user_id, conversation_id, source, elapsed_ms, answer_chars, question,
@@ -214,6 +218,12 @@ public class AuditTrail {
                     }
                     String recordedPrev = rs.getString("prev_hash");
                     if (expectedPrev.get() == null) {
+                        if (!GENESIS.equals(recordedPrev)) {
+                            valid.set(false);
+                            chainHeadMissing.set(true);
+                            brokenAtId.set(id);
+                            return;
+                        }
                         expectedPrev.set(recordedPrev);
                     } else if (!expectedPrev.get().equals(recordedPrev)) {
                         valid.set(false);
@@ -232,7 +242,8 @@ public class AuditTrail {
                     expectedPrev.set(recordedHash);
                 });
 
-        return new ChainVerification(valid.get(), rowsChecked.get(), legacyRowsSkipped.get(), brokenAtId.get());
+        return new ChainVerification(valid.get(), rowsChecked.get(), legacyRowsSkipped.get(),
+                brokenAtId.get(), chainHeadMissing.get());
     }
 
     public void toolCalled(String tool, String tenant) {

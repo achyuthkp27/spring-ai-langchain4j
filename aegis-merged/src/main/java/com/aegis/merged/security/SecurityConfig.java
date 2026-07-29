@@ -61,6 +61,8 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/prometheus", "/actuator/metrics/**", "/actuator/info")
                         .hasAuthority("PERM_admin:all")
 
+                        .requestMatchers("/api/admin/ingest/**").hasAuthority("PERM_platform:admin")
+
                         .requestMatchers("/api/admin/**").hasAuthority("PERM_admin:all")
                         
                         .anyRequest().authenticated())

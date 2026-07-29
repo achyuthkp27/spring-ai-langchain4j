@@ -84,6 +84,7 @@ public class ConfirmationGuard {
             return false;
         }
         if (!a.userId().equals(userId) || !a.tool().equals(tool) || !a.argsKey().equals(canon(args))) {
+            pending.remove(token);
             return false;
         }
         if (!a.used().compareAndSet(false, true)) {

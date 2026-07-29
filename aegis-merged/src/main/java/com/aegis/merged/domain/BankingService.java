@@ -100,7 +100,7 @@ public class BankingService {
                 .toList();
     }
 
-    public Account renameAccount(String accountId, String nickname) {
+    public synchronized Account renameAccount(String accountId, String nickname) {
         return accounts.computeIfPresent(accountId, (k, a) ->
                 new Account(a.accountId(), a.tenantId(), a.ownerUserId(), a.balance(), a.type(), nickname));
     }

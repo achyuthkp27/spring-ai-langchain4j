@@ -152,28 +152,9 @@ public class AssistantController {
 
     public record ChatRequest(String conversationId, String message) {
 
-        private static final int MAX_MESSAGE_LENGTH = 4000;
-        private static final int MAX_CONVERSATION_ID_LENGTH = 128;
-        private static final java.util.regex.Pattern CONVERSATION_ID_PATTERN =
-                java.util.regex.Pattern.compile("^[A-Za-z0-9._-]+$");
-
         public ChatRequest {
-            if (conversationId == null || conversationId.isBlank()) {
-                conversationId = "default";
-            }
-            if (conversationId.length() > MAX_CONVERSATION_ID_LENGTH
-                    || !CONVERSATION_ID_PATTERN.matcher(conversationId).matches()) {
-                throw new IllegalArgumentException(
-                        "conversationId must be alphanumeric (._- allowed), max "
-                                + MAX_CONVERSATION_ID_LENGTH + " characters.");
-            }
-            if (message == null || message.isBlank()) {
-                throw new IllegalArgumentException("message must not be blank.");
-            }
-            if (message.length() > MAX_MESSAGE_LENGTH) {
-                throw new IllegalArgumentException(
-                        "message must be " + MAX_MESSAGE_LENGTH + " characters or fewer.");
-            }
+            conversationId = ChatInputValidation.normalizeAndValidateConversationId(conversationId);
+            ChatInputValidation.validateMessage(message);
         }
     }
 
@@ -317,6 +298,7 @@ public class AssistantController {
                     for (PendingWidget w : pendingWidgets) {
                         widgetHistoryStore.save(memoryKey, turnSeq, w.widgetType(), w.payload());
                     }
+                    pendingWidgets.clear();
 
                     var usage = state.usage;
                     if (usage != null && usage.getTotalTokens() != null && usage.getTotalTokens() > 0) {
@@ -327,7 +309,7 @@ public class AssistantController {
                     long ms = ms(start);
                     audit.record(tenantId, userId, cid, "llm", ms, redactedAnswer.length(), redactedQ);
                     return Mono.just(metaEvent(new ChatReply(cid, redactedAnswer, "llm", ms, null, null)));
-                }));
+                }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic()));
 
         Flux<ServerSentEvent<String>> statusEvents = statusSink.asFlux()
                 .map(s -> ServerSentEvent.<String>builder().event("status")
@@ -362,7 +344,7 @@ public class AssistantController {
         answer = answer.doFinally(sig -> {
             if (sig == reactor.core.publisher.SignalType.CANCEL) {
                 audit.record(tenantId, userId, cid, "cancelled", ms(start), state.sanitized.length(), redactedQ);
-                persistPendingWidgets(memoryKey, pendingWidgets);
+                persistCancelledTurnWidgets(memoryKey, pendingWidgets);
             }
             statusSink.tryEmitComplete();
             cardsSink.tryEmitComplete();
@@ -404,9 +386,9 @@ public class AssistantController {
     record PendingWidget(String widgetType, String payload) {
     }
 
-    void persistPendingWidgets(String memoryKey, List<PendingWidget> pendingWidgets) {
+    void persistCancelledTurnWidgets(String memoryKey, List<PendingWidget> pendingWidgets) {
         if (pendingWidgets.isEmpty()) return;
-        int turnSeq = widgetHistoryStore.nextTurnSeq(memoryKey);
+        int turnSeq = widgetHistoryStore.currentTurnSeq(memoryKey) + 1;
         for (PendingWidget w : pendingWidgets) {
             widgetHistoryStore.save(memoryKey, turnSeq, w.widgetType(), w.payload());
         }

@@ -32,14 +32,15 @@ public class TokenAuditAdvisor implements CallAdvisor, StreamAdvisor {
 
         var chatResponse = response.chatResponse();
         if (chatResponse != null && chatResponse.getMetadata() != null
-                && chatResponse.getMetadata().getUsage() != null) {
+                && chatResponse.getMetadata().getUsage() != null
+                && chatResponse.getMetadata().getUsage().getTotalTokens() != null) {
             Usage usage = chatResponse.getMetadata().getUsage();
             String model = chatResponse.getMetadata().getModel();
             String tenant = tenantOf(request);
             log.info("ai.call model={} tenant={} elapsedMs={} promptTokens={} completionTokens={} totalTokens={}",
                     model, tenant, elapsedMs,
                     usage.getPromptTokens(), usage.getCompletionTokens(), usage.getTotalTokens());
-            
+
             meterRegistry.counter("aegis.ai.tokens.total", "tenant", tenant, "model", safe(model))
                     .increment(usage.getTotalTokens());
             meterRegistry.counter("aegis.ai.calls.total", "tenant", tenant, "model", safe(model))

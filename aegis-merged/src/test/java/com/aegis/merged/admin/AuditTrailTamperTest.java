@@ -95,4 +95,20 @@ class AuditTrailTamperTest {
         AuditTrail.ChainVerification result = audit.verifyChain();
         assertThat(result.valid()).isFalse();
     }
+
+    @Test
+    void deletingTheFirstRowIsDetectedAsAMissingChainHead() throws InterruptedException {
+        audit.record("achu-bank", "u1", "c1", "llm", 10, 5, "q1");
+        audit.record("achu-bank", "u1", "c1", "llm", 12, 7, "q2");
+        audit.record("achu-bank", "u1", "c1", "llm", 14, 9, "q3");
+        waitForRowCount(3);
+
+        Long firstId = jdbc.queryForObject(
+                "SELECT id FROM assistant_audit_event ORDER BY id ASC LIMIT 1", Long.class);
+        jdbc.update("DELETE FROM assistant_audit_event WHERE id = ?", firstId);
+
+        AuditTrail.ChainVerification result = audit.verifyChain();
+        assertThat(result.valid()).isFalse();
+        assertThat(result.chainHeadMissing()).isTrue();
+    }
 }

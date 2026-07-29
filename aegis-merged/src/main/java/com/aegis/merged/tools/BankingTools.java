@@ -573,10 +573,12 @@ public class BankingTools {
         BigDecimal debits = BigDecimal.ZERO;
         BigDecimal credits = BigDecimal.ZERO;
         for (var t : list) {
-            String category = categoryOf(t.merchant());
-            byCategory.merge(category, t.amount(), BigDecimal::add);
-            if ("CREDIT".equals(t.direction())) credits = credits.add(t.amount());
-            else debits = debits.add(t.amount());
+            if ("CREDIT".equals(t.direction())) {
+                credits = credits.add(t.amount());
+            } else {
+                debits = debits.add(t.amount());
+                byCategory.merge(categoryOf(t.merchant()), t.amount(), BigDecimal::add);
+            }
         }
         var summary = new SpendingSummary(accountId, byCategory, debits, credits);
         emitStatement(ctx, summary);
@@ -632,6 +634,7 @@ public class BankingTools {
     @Tool(description = "Set (or clear) a spending limit on one of the customer's own cards.")
     public String setCardSpendingLimit(@ToolParam(description = "card id") String cardId,
                                        @ToolParam(description = "limit in dollars, or \"none\" to clear it") String limit,
+                                       @ToolParam(description = CONFIRMATION_TOKEN_PARAM_DESC) String confirmationToken,
                                        ToolContext ctx) {
         var p = principal(ctx);
         require(p, "cards:manage");
@@ -640,7 +643,6 @@ public class BankingTools {
         if (ownedAccount(p, card.accountId()) == null) {
             throw new AccessDeniedException("That card is not on one of your accounts.");
         }
-        audit.toolCalled("setCardSpendingLimit", p.tenantId());
         BigDecimal parsed;
         if ("none".equalsIgnoreCase(limit.trim())) {
             parsed = null;
@@ -654,6 +656,17 @@ public class BankingTools {
                 return "Spending limit must be a positive dollar amount (or \"none\" to clear it).";
             }
         }
+
+        if (!confirmationGuard.verify(confirmationToken, p.userId(), "setCardSpendingLimit", cardId, limit)) {
+            String token = confirmationGuard.issue(p.userId(), "setCardSpendingLimit", cardId, limit);
+            audit.toolCalled("setCardSpendingLimit:pending-confirmation", p.tenantId());
+            return "CONFIRMATION_REQUIRED token=" + token + ": tell the customer you're about to "
+                    + (parsed == null ? "remove the spending limit" : "set a $" + parsed + " spending limit")
+                    + " on card " + cardId + " and ask them to confirm before calling this tool again "
+                    + "with confirmationToken=\"" + token + "\".";
+        }
+
+        audit.toolCalled("setCardSpendingLimit", p.tenantId());
         status(ctx, "Updating spending limit for " + cardId + "…");
         var updated = banking.setSpendingLimit(cardId, parsed);
         if (updated == null) { markFailed(ctx); return "Card " + cardId + " no longer exists."; }
@@ -670,6 +683,7 @@ public class BankingTools {
     public String toggleMerchantCategoryBlock(@ToolParam(description = "card id") String cardId,
                                               @ToolParam(description = "category, e.g. GAMBLING") String category,
                                               @ToolParam(description = "true to block, false to unblock") boolean blocked,
+                                              @ToolParam(description = CONFIRMATION_TOKEN_PARAM_DESC) String confirmationToken,
                                               ToolContext ctx) {
         var p = principal(ctx);
         require(p, "cards:manage");
@@ -683,6 +697,18 @@ public class BankingTools {
         if (ownedAccount(p, card.accountId()) == null) {
             throw new AccessDeniedException("That card is not on one of your accounts.");
         }
+
+        if (!confirmationGuard.verify(confirmationToken, p.userId(), "toggleMerchantCategoryBlock",
+                cardId, normalizedCategory, blocked)) {
+            String token = confirmationGuard.issue(p.userId(), "toggleMerchantCategoryBlock",
+                    cardId, normalizedCategory, blocked);
+            audit.toolCalled("toggleMerchantCategoryBlock:pending-confirmation", p.tenantId());
+            return "CONFIRMATION_REQUIRED token=" + token + ": tell the customer you're about to "
+                    + (blocked ? "block " : "unblock ") + normalizedCategory + " on card " + cardId
+                    + " and ask them to confirm before calling this tool again with confirmationToken=\""
+                    + token + "\".";
+        }
+
         audit.toolCalled("toggleMerchantCategoryBlock", p.tenantId());
         status(ctx, (blocked ? "Blocking " : "Unblocking ") + normalizedCategory + " on " + cardId + "…");
         var updated = banking.toggleMerchantCategory(cardId, normalizedCategory, blocked);

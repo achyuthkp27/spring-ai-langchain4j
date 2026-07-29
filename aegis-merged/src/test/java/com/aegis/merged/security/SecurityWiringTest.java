@@ -125,4 +125,11 @@ class SecurityWiringTest {
                 .andReturn().getResponse().getContentAsString();
         assertThat(overviewBody).doesNotContain("globex-bank");
     }
+
+    @Test
+    void aPlainAdminCannotReIngestEveryTenantsDocuments() throws Exception {
+        String plainAdmin = mint("achu-admin3", "achu-bank", "admin");
+        mockMvc.perform(post("/api/admin/ingest").header("Authorization", "Bearer " + plainAdmin))
+                .andExpect(status().isForbidden());
+    }
 }

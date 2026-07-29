@@ -46,21 +46,30 @@ async function liveBackend(force = false): Promise<string | null> {
   return null;
 }
 
-async function forward(req: NextRequest, base: string, path: string): Promise<Response> {
+function isStreamingRequest(req: NextRequest): boolean {
+  return (req.headers.get("accept") ?? "").includes("text/event-stream");
+}
+
+async function forward(
+  req: NextRequest,
+  base: string,
+  path: string,
+  body: ArrayBuffer | undefined,
+): Promise<Response> {
   const url = `${base}/api/${path}${req.nextUrl.search}`;
   const headers: Record<string, string> = {};
   for (const h of ["authorization", "content-type", "accept"]) {
     const v = req.headers.get(h);
     if (v) headers[h] = v;
   }
+  const streaming = isStreamingRequest(req);
   const res = await fetch(url, {
     method: req.method,
     headers,
-    body: req.method === "GET" || req.method === "HEAD" ? undefined : req.body,
-    duplex: "half",
+    body,
     cache: "no-store",
-    signal: AbortSignal.timeout(FORWARD_TIMEOUT_MS),
-  } as RequestInit & { duplex: "half" });
+    signal: streaming ? undefined : AbortSignal.timeout(FORWARD_TIMEOUT_MS),
+  });
 
   const responseHeaders = new Headers();
   res.headers.forEach((value, key) => {
@@ -87,14 +96,18 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
   if (!base) {
     return Response.json({ error: "No Aegis backend is reachable" }, { status: 502 });
   }
+
+  const hasBody = req.method !== "GET" && req.method !== "HEAD";
+  const body = hasBody ? await req.arrayBuffer() : undefined;
+
   try {
-    return await forward(req, base, joined);
+    return await forward(req, base, joined, body);
   } catch {
     base = await liveBackend(true);
     if (!base) {
       return Response.json({ error: "No Aegis backend is reachable" }, { status: 502 });
     }
-    return forward(req, base, joined);
+    return forward(req, base, joined, body);
   }
 }
 

@@ -131,29 +131,31 @@ class AssistantControllerStreamingTest {
     }
 
     @Test
-    @DisplayName("Widgets produced before a cancelled turn are still persisted, "
-            + "since the tools that produced them already ran")
-    void pendingWidgetsArePersistedOnCancel() {
+    @DisplayName("Widgets produced before a cancelled turn are persisted under currentTurnSeq+1 "
+            + "WITHOUT incrementing the counter, so the next completed turn reclaims that seq "
+            + "and history() alignment never drifts")
+    void pendingWidgetsArePersistedOnCancelWithoutAdvancingTheCounter() {
         WidgetHistoryStore widgetHistoryStore = mock(WidgetHistoryStore.class);
-        when(widgetHistoryStore.nextTurnSeq(anyString())).thenReturn(5);
+        when(widgetHistoryStore.currentTurnSeq(anyString())).thenReturn(4);
         AssistantController controller = newController(widgetHistoryStore);
 
         var pendingWidgets = List.of(new AssistantController.PendingWidget("cards", "{\"cardId\":\"CRD-1\"}"));
 
-        controller.persistPendingWidgets("achu-bank:u1:c1", pendingWidgets);
+        controller.persistCancelledTurnWidgets("achu-bank:u1:c1", pendingWidgets);
 
-        verify(widgetHistoryStore).nextTurnSeq("achu-bank:u1:c1");
+        verify(widgetHistoryStore, never()).nextTurnSeq(anyString());
         verify(widgetHistoryStore).save("achu-bank:u1:c1", 5, "cards", "{\"cardId\":\"CRD-1\"}");
     }
 
     @Test
-    @DisplayName("A cancelled turn with no widgets does not burn a turn sequence number")
+    @DisplayName("A cancelled turn with no widgets touches neither the counter nor the store")
     void noTurnSeqAllocatedWhenNothingToPersist() {
         WidgetHistoryStore widgetHistoryStore = mock(WidgetHistoryStore.class);
         AssistantController controller = newController(widgetHistoryStore);
 
-        controller.persistPendingWidgets("achu-bank:u1:c1", List.of());
+        controller.persistCancelledTurnWidgets("achu-bank:u1:c1", List.of());
 
+        verify(widgetHistoryStore, never()).currentTurnSeq(anyString());
         verify(widgetHistoryStore, never()).nextTurnSeq(anyString());
         verify(widgetHistoryStore, times(0)).save(anyString(), anyInt(), anyString(), anyString());
     }
