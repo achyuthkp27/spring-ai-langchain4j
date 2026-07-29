@@ -1,35 +1,13 @@
+import { createAuthClient } from "./authClient";
 
-const ADMIN_TOKEN_KEY = "aegis.admin.jwt";
-
-interface CachedAdminToken {
-  token: string;
-  exp: number;
-}
-
-async function getAdminToken(): Promise<string> {
-  if (typeof window !== "undefined") {
-    const cached = sessionStorage.getItem(ADMIN_TOKEN_KEY);
-    if (cached) {
-      const { token, exp } = JSON.parse(cached) as CachedAdminToken;
-      if (Date.now() < exp - 60_000) return token;
-    }
-  }
-  const res = await fetch("/api/auth/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId: "admin-user", tenantId: "achu-bank", role: "admin" }),
-  });
-  if (!res.ok) throw new Error(`admin auth failed: ${res.status}`);
-  const data = (await res.json()) as { token: string };
-  if (typeof window !== "undefined") {
-    sessionStorage.setItem(ADMIN_TOKEN_KEY, JSON.stringify({ token: data.token, exp: Date.now() + 55 * 60_000 }));
-  }
-  return data.token;
-}
+const client = createAuthClient("aegis.admin.jwt", {
+  userId: "admin-user",
+  tenantId: "achu-bank",
+  role: "admin",
+});
 
 async function adminGet<T>(path: string): Promise<T> {
-  const token = await getAdminToken();
-  const res = await fetch(`/api/admin${path}`, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await client.authFetch(`/api/admin${path}`);
   if (!res.ok) throw new Error(`admin request failed: ${res.status} ${path}`);
   return (await res.json()) as T;
 }

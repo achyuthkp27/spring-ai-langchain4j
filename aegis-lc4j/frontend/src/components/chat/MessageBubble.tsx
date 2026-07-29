@@ -5,7 +5,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import clsx from "clsx";
-import { AlertTriangle, Check, Copy, ShieldOff, Zap } from "lucide-react";
+import { AlertTriangle, Check, CircleStop, Copy, ShieldOff, Zap } from "lucide-react";
 import type { Message } from "@/hooks/useChatStream";
 import { BrandMark } from "@/components/BrandMark";
 import { CardCarousel } from "./CardCarousel";
@@ -108,6 +108,20 @@ export const MessageBubble = memo(function MessageBubble({ message }: { message:
             {badge.text}
             {message.meta?.source === "cache" && message.meta.elapsedMs != null && (
               <span className="text-muted">· {message.meta.elapsedMs}ms</span>
+            )}
+          </div>
+        )}
+
+        {message.interrupted && (
+          <div className="flex items-center gap-1.5 text-micro font-medium text-warning-ink">
+            {message.interrupted === "stopped" ? (
+              <>
+                <CircleStop size={12} className="shrink-0" /> You stopped this response
+              </>
+            ) : (
+              <>
+                <AlertTriangle size={12} className="shrink-0" /> Response interrupted — it may be incomplete
+              </>
             )}
           </div>
         )}

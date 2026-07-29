@@ -84,6 +84,18 @@ export interface StatementData {
   totalCredits: number;
 }
 
+/**
+ * Why the stream ended unsuccessfully.
+ * - `http`   — the request itself failed (status carries 401/403/5xx).
+ * - `network`— fetch threw (connection dropped before/after headers).
+ * - `stream` — the body closed without a terminating `meta` event, so the
+ *   answer is incomplete. This is what stops a bubble stranding in `streaming`.
+ */
+export interface StreamError {
+  kind: "http" | "network" | "stream";
+  status?: number;
+}
+
 export interface StreamHandlers {
   onToken: (text: string) => void;
   onStatus: (status: string) => void;
@@ -97,59 +109,114 @@ export interface StreamHandlers {
   onProfile: (profile: ProfileData) => void;
   onStatement: (statement: StatementData) => void;
   onMeta: (meta: ChatMeta) => void;
-  onError: (err: Error) => void;
+  onError: (err: StreamError) => void;
   onAbort?: () => void;
 }
 
+/**
+ * Drives one assistant turn. Guarantees exactly one terminal callback —
+ * `onMeta` (success), `onAbort` (cancelled), or `onError` (anything else) — so
+ * the caller can always leave the "streaming" state. `reauth`, when supplied,
+ * is called once on a 401 to obtain a fresh token and the request is retried.
+ */
 export async function streamChat(
   token: string,
   conversationId: string,
   message: string,
   handlers: StreamHandlers,
   signal?: AbortSignal,
+  reauth?: () => Promise<string | null>,
 ): Promise<void> {
   let res: Response;
+  let bearer = token;
   try {
-    res = await fetch("/api/assistant", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-        Accept: "text/event-stream",
-      },
-      body: JSON.stringify({ conversationId, message }),
-      signal,
-    });
+    for (let attempt = 0; ; attempt++) {
+      res = await fetch("/api/assistant", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${bearer}`,
+          Accept: "text/event-stream",
+        },
+        body: JSON.stringify({ conversationId, message }),
+        signal,
+      });
+      if (res.status === 401 && reauth && attempt === 0) {
+        const fresh = await reauth();
+        if (fresh) {
+          bearer = fresh;
+          continue;
+        }
+      }
+      break;
+    }
   } catch (e) {
-    handlers.onError(e instanceof Error ? e : new Error(String(e)));
+    if ((e as DOMException)?.name === "AbortError") handlers.onAbort?.();
+    else handlers.onError({ kind: "network" });
     return;
   }
   if (!res.ok || !res.body) {
-    handlers.onError(new Error(`assistant request failed: ${res.status}`));
+    handlers.onError({ kind: "http", status: res.status });
     return;
   }
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let terminated = false; // a `meta` (or explicit `error`) frame closed the turn
 
   const dispatch = (event: string, data: string) => {
+    let payload: unknown;
     try {
-      const payload = JSON.parse(data);
-      if (event === "token" && typeof payload.t === "string") handlers.onToken(payload.t);
-      else if (event === "status" && typeof payload.s === "string") handlers.onStatus(payload.s);
-      else if (event === "cards" && Array.isArray(payload)) handlers.onCards(payload as CardData[]);
-      else if (event === "accounts" && Array.isArray(payload)) handlers.onAccounts(payload as AccountData[]);
-      else if (event === "transactions" && Array.isArray(payload)) handlers.onTransactions(payload as TransactionData[]);
-      else if (event === "case") handlers.onCase(payload as CaseData);
-      else if (event === "approval") handlers.onApproval(payload as ApprovalData);
-      else if (event === "citations" && Array.isArray(payload)) handlers.onCitations(payload as CitationData[]);
-      else if (event === "ledger" && Array.isArray(payload)) handlers.onLedger(payload as LedgerEntryData[]);
-      else if (event === "profile") handlers.onProfile(payload as ProfileData);
-      else if (event === "statement") handlers.onStatement(payload as StatementData);
-      else if (event === "meta") handlers.onMeta(payload as ChatMeta);
+      payload = JSON.parse(data);
     } catch {
-      
+      return; // malformed frame — skip, the terminal guard still applies
+    }
+    const p = payload as Record<string, unknown>;
+    switch (event) {
+      case "token":
+        if (typeof p.t === "string") handlers.onToken(p.t);
+        break;
+      case "status":
+        if (typeof p.s === "string") handlers.onStatus(p.s);
+        break;
+      case "cards":
+        if (Array.isArray(payload)) handlers.onCards(payload as CardData[]);
+        break;
+      case "accounts":
+        if (Array.isArray(payload)) handlers.onAccounts(payload as AccountData[]);
+        break;
+      case "transactions":
+        if (Array.isArray(payload)) handlers.onTransactions(payload as TransactionData[]);
+        break;
+      case "case":
+        handlers.onCase(payload as CaseData);
+        break;
+      case "approval":
+        handlers.onApproval(payload as ApprovalData);
+        break;
+      case "citations":
+        if (Array.isArray(payload)) handlers.onCitations(payload as CitationData[]);
+        break;
+      case "ledger":
+        if (Array.isArray(payload)) handlers.onLedger(payload as LedgerEntryData[]);
+        break;
+      case "profile":
+        handlers.onProfile(payload as ProfileData);
+        break;
+      case "statement":
+        handlers.onStatement(payload as StatementData);
+        break;
+      case "meta":
+        terminated = true;
+        handlers.onMeta(payload as ChatMeta);
+        break;
+      case "error":
+        terminated = true;
+        handlers.onError({ kind: "stream" });
+        break;
+      default:
+        break; // unknown event name — ignore, don't let it strand the turn
     }
   };
 
@@ -158,7 +225,7 @@ export async function streamChat(
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
-      
+
       let sep: number;
       while ((sep = buffer.indexOf("\n\n")) >= 0) {
         const frame = buffer.slice(0, sep);
@@ -173,10 +240,11 @@ export async function streamChat(
       }
     }
   } catch (e) {
-    if ((e as DOMException)?.name === "AbortError") {
-      handlers.onAbort?.();
-    } else {
-      handlers.onError(e instanceof Error ? e : new Error(String(e)));
-    }
+    if ((e as DOMException)?.name === "AbortError") handlers.onAbort?.();
+    else handlers.onError({ kind: "network" });
+    return;
   }
+
+  // The body closed cleanly but no `meta` arrived: the answer is incomplete.
+  if (!terminated) handlers.onError({ kind: "stream" });
 }

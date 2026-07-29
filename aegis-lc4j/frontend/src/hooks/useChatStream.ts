@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { getToken, fetchHistory, type HistoryMessage } from "@/lib/api";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { getToken, refreshToken, fetchHistory, type HistoryMessage } from "@/lib/api";
 import {
   streamChat,
   type AccountData,
@@ -13,6 +13,7 @@ import {
   type LedgerEntryData,
   type ProfileData,
   type StatementData,
+  type StreamError,
   type TransactionData,
 } from "@/lib/sse";
 
@@ -21,6 +22,8 @@ export interface Message {
   role: "user" | "assistant";
   text: string;
   streaming?: boolean;
+  /** How a non-normal turn ended, for a trailing marker in the bubble. */
+  interrupted?: "stopped" | "error";
   meta?: ChatMeta;
   cards?: CardData[];
   accounts?: AccountData[];
@@ -93,6 +96,15 @@ function hydrateAssistantMessage(h: HistoryMessage): Message {
   return msg;
 }
 
+function errorCopy(err: StreamError): string {
+  if (err.kind === "stream") return "The response was cut short. Please try again.";
+  if (err.status === 401) return "Your session expired. Please refresh and sign in again.";
+  if (err.status === 403) return "I can't help with that on your account.";
+  if (err.status === 429) return "You're sending requests too quickly. Please wait a moment and retry.";
+  if (err.status && err.status >= 500) return "The assistant is temporarily unavailable. Please try again.";
+  return "Something went wrong reaching the assistant. Please try again.";
+}
+
 export function useChatStream(conversationId: string) {
   const [state, setState] = useState<ChatState>({
     messages: [],
@@ -102,9 +114,27 @@ export function useChatStream(conversationId: string) {
   });
   const abortRef = useRef<AbortController | null>(null);
 
+  // The conversation currently on screen. Every async callback checks this
+  // before writing state, so a stream or history fetch that resolves after the
+  // user has switched away can never touch the conversation now displayed.
+  const activeIdRef = useRef(conversationId);
+  activeIdRef.current = conversationId;
+
+  // Monotonic history-request id: only the newest fetch is allowed to apply,
+  // so a slow response can't overwrite a conversation loaded after it.
+  const historyReqRef = useRef(0);
+
+  // Abort any in-flight stream when the conversation changes or the hook unmounts.
+  useEffect(() => {
+    return () => abortRef.current?.abort();
+  }, [conversationId]);
+
   const loadHistory = useCallback(async () => {
+    const seq = ++historyReqRef.current;
+    const reqConvId = conversationId;
     try {
       const history = await fetchHistory(conversationId);
+      if (seq !== historyReqRef.current || activeIdRef.current !== reqConvId) return;
       setState({
         messages: history.map((h) =>
           h.role === "assistant" ? hydrateAssistantMessage(h) : { id: id(), role: "user", text: h.text },
@@ -114,12 +144,16 @@ export function useChatStream(conversationId: string) {
         historyError: false,
       });
     } catch {
+      if (seq !== historyReqRef.current || activeIdRef.current !== reqConvId) return;
       setState((s) => ({ ...s, historyError: true }));
     }
   }, [conversationId]);
 
   const send = useCallback(
     async (text: string) => {
+      const sendConvId = conversationId;
+      const isCurrent = () => activeIdRef.current === sendConvId;
+
       const userMsg: Message = { id: id(), role: "user", text };
       const botId = id();
       setState((s) => ({
@@ -129,14 +163,18 @@ export function useChatStream(conversationId: string) {
         busy: true,
       }));
 
+      // A previous stream on this hook must be cancelled before starting a new one.
+      abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
 
-      const patchBot = (fn: (m: Message) => Message) =>
-        setState((s) => ({
-          ...s,
-          messages: s.messages.map((m) => (m.id === botId ? fn(m) : m)),
-        }));
+      const patchBot = (fn: (m: Message) => Message) => {
+        if (!isCurrent()) return;
+        setState((s) => ({ ...s, messages: s.messages.map((m) => (m.id === botId ? fn(m) : m)) }));
+      };
+      const settle = () => {
+        if (isCurrent()) setState((s) => ({ ...s, statuses: [], busy: false }));
+      };
 
       let token: string;
       try {
@@ -145,20 +183,22 @@ export function useChatStream(conversationId: string) {
         patchBot((m) => ({
           ...m,
           streaming: false,
+          interrupted: "error",
           text: "Couldn't sign you in. Please refresh and try again.",
         }));
-        setState((s) => ({ ...s, statuses: [], busy: false }));
+        settle();
         return;
       }
 
       await streamChat(
         token,
-        conversationId,
+        sendConvId,
         text,
         {
           onToken: (t) => patchBot((m) => ({ ...m, text: m.text + t })),
-          onStatus: (status) =>
-            setState((s) => ({ ...s, statuses: [...s.statuses.slice(-3), status] })),
+          onStatus: (status) => {
+            if (isCurrent()) setState((s) => ({ ...s, statuses: [...s.statuses.slice(-3), status] }));
+          },
           onCards: (cards) => patchBot((m) => ({ ...m, cards: mergeCards(m.cards, cards) })),
           onAccounts: (accounts) => patchBot((m) => ({ ...m, accounts: mergeAccounts(m.accounts, accounts) })),
           onTransactions: (txns) =>
@@ -171,22 +211,26 @@ export function useChatStream(conversationId: string) {
           onStatement: (statement) => patchBot((m) => ({ ...m, statement })),
           onMeta: (meta) => {
             patchBot((m) => ({ ...m, streaming: false, meta }));
-            setState((s) => ({ ...s, statuses: [], busy: false }));
+            settle();
           },
-          onError: () => {
+          onError: (err) => {
             patchBot((m) => ({
               ...m,
               streaming: false,
-              text: m.text || "Something went wrong reaching the assistant. Please try again.",
+              // Partial text is kept but flagged, so a cut-off answer never
+              // reads as a confident, complete one.
+              interrupted: "error",
+              text: m.text || errorCopy(err),
             }));
-            setState((s) => ({ ...s, statuses: [], busy: false }));
+            settle();
           },
           onAbort: () => {
-            patchBot((m) => ({ ...m, streaming: false }));
-            setState((s) => ({ ...s, statuses: [], busy: false }));
+            patchBot((m) => ({ ...m, streaming: false, interrupted: m.text ? "stopped" : undefined }));
+            settle();
           },
         },
         controller.signal,
+        refreshToken,
       );
     },
     [conversationId],

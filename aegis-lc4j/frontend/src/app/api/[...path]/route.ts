@@ -1,5 +1,11 @@
 import { NextRequest } from "next/server";
 
+// This route proxies SSE; it must never be statically evaluated, and it needs a
+// generous ceiling so a long streamed turn isn't cut off by the platform's
+// default function timeout (10–15s on Vercel).
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
 const IS_PROD = process.env.NODE_ENV === "production";
 
 const CANDIDATES = process.env.BACKEND_URL
