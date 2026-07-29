@@ -1,7 +1,29 @@
 // Server-only: shared backend discovery for the proxy routes. Not importable
 // from client components (it reads process.env and has no "use client").
 
+import type { NextRequest } from "next/server";
+
 const IS_PROD = process.env.NODE_ENV === "production";
+
+/**
+ * True only on a positive cross-site signal. Defense-in-depth against CSRF for
+ * cookie-authenticated, state-changing requests: `SameSite=Strict` is the
+ * primary defense, this is the belt. Prefers the Fetch-Metadata header (browser
+ * -set, unforgeable, proxy-safe); falls back to comparing the Origin host to the
+ * Host header (both browser-supplied, so robust behind a reverse proxy). Absent
+ * any signal — a same-origin GET, or a non-browser client — it does not block.
+ */
+export function isCrossSite(req: NextRequest): boolean {
+  const site = req.headers.get("sec-fetch-site");
+  if (site) return site === "cross-site";
+  const origin = req.headers.get("origin");
+  if (!origin) return false;
+  try {
+    return new URL(origin).host !== req.headers.get("host");
+  } catch {
+    return true;
+  }
+}
 
 export const CANDIDATES = process.env.BACKEND_URL
   ? [process.env.BACKEND_URL]

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { liveBackend } from "@/lib/backendProxy";
+import { isCrossSite, liveBackend } from "@/lib/backendProxy";
 
 // Takes precedence over the [...path] catch-all for POST /api/auth/token.
 export const dynamic = "force-dynamic";
@@ -40,6 +40,10 @@ function tokenTtlSeconds(token: string): number {
  * keeps a token out of reach of any XSS.
  */
 export async function POST(req: NextRequest): Promise<Response> {
+  // Minting sets a session cookie; block a cross-site caller from forcing one.
+  if (isCrossSite(req)) {
+    return Response.json({ error: "Cross-site request blocked" }, { status: 403 });
+  }
   const base = await liveBackend();
   if (!base) return Response.json({ error: "No Aegis backend is reachable" }, { status: 502 });
 

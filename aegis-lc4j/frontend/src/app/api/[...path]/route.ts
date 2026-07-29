@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { CANDIDATES, liveBackend } from "@/lib/backendProxy";
+import { CANDIDATES, isCrossSite, liveBackend } from "@/lib/backendProxy";
 
 // This route proxies SSE; it must never be statically evaluated, and it needs a
 // generous ceiling so a long streamed turn isn't cut off by the platform's
@@ -9,6 +9,7 @@ export const maxDuration = 60;
 
 const FORWARD_TIMEOUT_MS = 30_000;
 const SEGMENT_PATTERN = /^[A-Za-z0-9._-]+$/;
+const MUTATING_METHODS = new Set(["POST", "PUT", "DELETE", "PATCH"]);
 const USER_COOKIE = "aegis_session";
 const ADMIN_COOKIE = "aegis_admin_session";
 const HOP_BY_HOP_HEADERS = new Set([
@@ -66,6 +67,11 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
   const { path } = await params;
   if (path.some((segment) => !SEGMENT_PATTERN.test(segment))) {
     return Response.json({ error: "Invalid path segment" }, { status: 400 });
+  }
+  // CSRF defense-in-depth: the session cookie is ambient, so a cross-site
+  // mutating request must be rejected before the bearer is injected upstream.
+  if (MUTATING_METHODS.has(req.method) && isCrossSite(req)) {
+    return Response.json({ error: "Cross-site request blocked" }, { status: 403 });
   }
   const joined = path.join("/");
 
