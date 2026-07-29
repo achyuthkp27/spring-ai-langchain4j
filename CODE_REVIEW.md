@@ -87,19 +87,15 @@ $800 of spending.
 because the token count isn't known until then. Concurrent requests all pass CHECK before any
 INCR lands, so a tenant can exceed its daily budget by roughly `concurrency × tokens_per_call`.
 
-This is now **acknowledged and tested** rather than silent — `BudgetGuardTest` has
-`concurrentRecordingDoesNotLoseUpdates` and a race-past-budget case asserting the tenant is
-"reliably blocked" once over. The parse-failure and fail-closed sub-points from the original
-finding are already fixed (guarded parse, explicit fail-open). The remaining overshoot is inherent
-to charging after generation; a true fix needs pre-reservation of an estimated cost, which is a
-larger design change. **Fine to leave as a documented soft-quota property** — just don't describe
-the budget as a hard cap.
+This is **acknowledged, tested, and now documented** — `BudgetGuardTest` has
+`concurrentRecordingDoesNotLoseUpdates` and a race-past-budget case, and the `BudgetGuard` class
+Javadoc now spells out the soft-quota property (overshoot ≈ `concurrency × tokens_per_call`, why it
+happens, and that a hard cap needs up-front reservation). Closed as documented behaviour.
 
-### 2.2 `doFinally` reads `state.sanitized.length()` cross-thread (benign)
+### 2.2 `doFinally` cross-thread read — resolved
 
-`AssistantController:346` — the cancel path reads the length of a `StringBuilder` written on the
-`concatMap` thread. Unsynchronized, but the only consequence is a possibly-stale character count
-in one audit row. Left as-is is defensible; a `volatile int` length mirror would remove it.
+The stream buffers are now `StringBuffer` (thread-safe), so `state.sanitized.length()` on the
+cancel path is a synchronized read, not a data race. No action needed.
 
 ---
 
@@ -134,20 +130,19 @@ finally covered. `RagRequestValidationTest`, `BudgetGuardTest` (concurrency), `R
 `useChatStream.test.ts`, `route.test.ts` (9 tests) — the pure-function boundaries recommended last
 pass.
 
-**Remaining gaps, minor:**
-1. No end-to-end test of `/api/rag/ask` / `ask-advanced` tenant isolation (the tool is covered).
-2. Container/eval suites still env-gated (`RUN_CONTAINER_TESTS`, `RUN_EVAL_TESTS`) — confirm CI
-   sets them or they're decoration.
+**Now covered:** `RagControllerTenantIsolationTest` drives `/api/rag/ask` with a real `ChatClient`
+over a mocked `ChatModel` and captures the `SearchRequest`, asserting the vector filter is scoped
+to the authenticated tenant regardless of what the query text names.
+
+**Remaining, minor:** container/eval suites are still env-gated (`RUN_CONTAINER_TESTS`,
+`RUN_EVAL_TESTS`) — confirm CI sets them or they're decoration.
+
+The two Javadoc amendments flagged earlier (confirmation = argument binding; `updateContactInfo`
+step-up gap) are already present in the `BankingTools` class Javadoc.
 
 ---
 
-## 5. Recommended next
+## 5. Status
 
-The backend is in good shape. In priority order:
-
-1. **Amend the two Javadocs** (§3.1 confirmation = argument binding; note the `updateContactInfo`
-   step-up gap) — leaving the consent claim overstated is the one remaining correctness-of-*docs*
-   risk, and it's five minutes.
-2. **Decide the budget story** (§2.1) — either document it as a soft quota or add pre-reservation.
-3. **RAG endpoint isolation test** (§4.1).
-4. Optionally close §2.2 with a `volatile` length mirror.
+Every actionable item is closed. The list in §3 is deliberate, documented trade-offs, not open
+work; §2 is now documented behaviour, not defects. `mvn -o test` green.

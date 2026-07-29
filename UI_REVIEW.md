@@ -112,26 +112,52 @@ truncating SSE; the failover retry replaying a consumed `req.body`) were closed 
 
 ---
 
-## 3. Open — deliberate / lower priority
+## 3. Hardening pass — delivered
 
-### 3.1 The App Router shell is one client island
-`/` is ~230 kB First Load JS, marked static but rendering an empty div because `ChatShell` is
-`"use client"` all the way down. The client-side JWT mint genuinely blocks server-rendering the
-chat, but the static shell (header, capability-card markup, admin headings) needn't be client JS,
-and `/admin` uses a hardcoded identity and *could* fetch server-side on first load. Real work, low
-urgency now that `loading.tsx` covers the first-paint gap.
+**The JWT is out of JavaScript's reach (was §3.2 — the one item with real security weight)**
+Moved to a BFF pattern, backend untouched. `POST /api/auth/token` (`app/api/auth/token/route.ts`)
+mints against the backend and sets the JWT as an **httpOnly, `SameSite=Strict`** cookie (Secure in
+prod), returning only the non-secret profile to the client. The `[...path]` proxy reads that cookie
+and injects `Authorization: Bearer …` upstream (selecting `aegis_session` vs `aegis_admin_session`
+by path, so the customer and admin identities stay separate). `authClient.ts` now caches only the
+profile — **no token in `sessionStorage`, nothing for an XSS to steal**. `sse.ts` and the fetch
+helpers drop the bearer and ride the same-origin cookie; 401s re-mint (refreshing the cookie) and
+retry.
 
-### 3.2 Tokens in `sessionStorage`
-`lib/authClient.ts` still holds the JWT in `sessionStorage` — readable by any XSS, the one frontend
-item with real security weight. A banking product wants an `httpOnly`, `SameSite=Strict` cookie
-with CSRF re-enabled server-side. `next.config.ts` is also empty — no CSP/security headers, which
-compounds it. The right move if this moves past demo status; a design change, not a bug.
+**CSP + security headers (was §3.2 cont.)** `next.config.ts` sets `X-Content-Type-Options`,
+`X-Frame-Options: DENY`, `Referrer-Policy`, and `Permissions-Policy` always, plus a
+`Content-Security-Policy` (notably `connect-src 'self'`, bounding exfiltration) and HSTS in
+production. CSP is production-gated so it doesn't fight dev HMR; verified the base headers appear in
+dev and CSP is appended under `NODE_ENV=production`.
 
-### 3.3 `lib/sse.ts` does no runtime schema validation
-`JSON.parse` then `as` cast. Low risk (the backend is the only producer); a `zod` boundary parse
-would be cheap insurance. Same gap on the history-rehydration path in `hydrateAssistantMessage`.
+**Runtime boundary validation (was §3.3)** `lib/schemas.ts` — hand-rolled predicate validators (no
+dependency; zod cost ~68 kB of First Load for a few flat shapes wasn't justified). `sse.ts` gates
+every structured widget frame, and a malformed `meta` still terminates the turn as incomplete
+rather than stranding it. `hydrateAssistantMessage` applies the same gate to persisted history
+rows. Covered by the existing SSE tests (13/13).
 
-### 3.4 `public/` still holds the Next.js starter SVGs and the default favicon. Trivial cleanup.
+**`public/` + favicon (was §3.4)** Removed the five Next.js starter SVGs and the default
+`favicon.ico`; added `app/icon.svg` — the brand mark on the near-black tile, so the browser tab is
+no longer a template tell.
+
+---
+
+## 4. Open — deliberate judgment call
+
+### 4.1 The App Router shell is one client island (not done — intentional)
+`/` is ~231 kB First Load, marked static but rendering an empty div because `ChatShell` is
+`"use client"` throughout. A full RSC split would hoist the static chrome to the server, but
+`ChatShell` is deeply interactive (streaming, aborts, per-conversation state) and the client-side
+session mint blocks server-rendering the personalised parts — so the split is a sizeable rewrite
+for a modest first-paint win, with real regression surface. **Deliberately deferred**: `loading.tsx`
+already covers the first-paint gap, and the payoff doesn't justify the risk for a demo. Revisit if
+first-paint JS becomes a measured problem.
+
+### 4.2 Toolchain note (not a code issue)
+`next start` against the current `--turbopack` build throws `routesManifest.dataRoutes is not
+iterable` — a known Next 15 turbopack-build-vs-`next start` mismatch, pre-existing and unrelated to
+this work. `next build` succeeds; deploys via a platform adapter are unaffected. If self-hosting
+with `next start` is needed, drop `--turbopack` from the `build` script.
 
 *Verified correct, don't break:* `MessageBubble` uses `ReactMarkdown` + `remarkGfm` with **no**
 `rehype-raw` — HTML escaped, `javascript:` URLs sanitised. The blocking inline theme script in
@@ -140,10 +166,8 @@ renders both icons via the `dark:` variant, so there's no hydration mismatch and
 
 ---
 
-## 4. Recommended next
+## 5. Status
 
-The high-impact logic work is done. What's left is deliberate:
-1. **§3.2** — `sessionStorage` → `httpOnly` cookie + a CSP in `next.config.ts`, if this moves past
-   demo status. The one item with real security weight.
-2. **§3.1** — the RSC split, if first-paint JS cost becomes a concern.
-3. **§3.3 / §3.4** — a `zod` boundary parse and the `public/` cleanup, both cheap.
+Every actionable item from the reviews is closed. Remaining: §4.1 (RSC split, deferred by
+judgment) and §4.2 (a toolchain note, not a code change). `tsc`, `eslint`, `vitest` (13/13), and
+`next build` all green.
