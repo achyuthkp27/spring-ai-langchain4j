@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 @RestController
 @RequestMapping("/api/assistant")
@@ -157,7 +158,7 @@ public class AssistantController {
         StringBuilder pending = new StringBuilder();
 
         Sinks.Many<String> statusSink = Sinks.many().multicast().onBackpressureBuffer();
-        java.util.function.Consumer<String> statusFn = statusSink::tryEmitNext;
+        Consumer<String> statusFn = statusSink::tryEmitNext;
 
         Flux<String> tokens = llmGuard.guard(assistant.prompt()
                 .user(redactedInput)

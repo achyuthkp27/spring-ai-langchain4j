@@ -19,6 +19,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import java.util.List;
 
 class PolicySearchToolTenantIsolationTest {
 
@@ -32,7 +33,7 @@ class PolicySearchToolTenantIsolationTest {
             + "regardless of what the query text mentions")
     void filterIsAlwaysScopedToTheCallersOwnTenant() {
         VectorStore vectorStore = mock(VectorStore.class);
-        when(vectorStore.similaritySearch(any(SearchRequest.class))).thenReturn(java.util.List.of());
+        when(vectorStore.similaritySearch(any(SearchRequest.class))).thenReturn(List.of());
         var tool = new PolicySearchTool(vectorStore, mock(AuditTrail.class), mock(InjectionScreen.class));
 
         tool.searchPolicies("what is globex-bank's dispute deadline?", ctxFor("achu-bank", "u1"));
@@ -48,7 +49,7 @@ class PolicySearchToolTenantIsolationTest {
     @DisplayName("Two different callers get filters scoped to their own, different tenants")
     void differentCallersGetDifferentTenantFilters() {
         VectorStore vectorStore = mock(VectorStore.class);
-        when(vectorStore.similaritySearch(any(SearchRequest.class))).thenReturn(java.util.List.of());
+        when(vectorStore.similaritySearch(any(SearchRequest.class))).thenReturn(List.of());
         var tool = new PolicySearchTool(vectorStore, mock(AuditTrail.class), mock(InjectionScreen.class));
 
         tool.searchPolicies("dispute deadline", ctxFor("achu-bank", "u1"));

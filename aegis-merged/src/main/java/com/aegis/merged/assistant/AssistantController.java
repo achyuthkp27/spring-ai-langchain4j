@@ -37,6 +37,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.HashMap;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 @RestController
 @RequestMapping("/api/assistant")
@@ -110,7 +116,7 @@ public class AssistantController {
         var messages = chatMemory.get(memoryKey);
         if (messages == null) return List.of();
 
-        Map<Integer, List<WidgetHistoryStore.WidgetRow>> byTurn = new java.util.HashMap<>();
+        Map<Integer, List<WidgetHistoryStore.WidgetRow>> byTurn = new HashMap<>();
         for (var row : widgetHistoryStore.loadForConversation(memoryKey)) {
             byTurn.computeIfAbsent(row.turnSeq(), k -> new ArrayList<>()).add(row);
         }
@@ -196,12 +202,12 @@ public class AssistantController {
                     "blocked", start, null);
         }
 
-        java.util.Optional<SemanticCache.Hit> hit;
+        Optional<SemanticCache.Hit> hit;
         try {
             hit = semanticCache.lookup(tenantId, request.message());
         } catch (Exception e) {
             log.warn("semanticCache.lookup.failed tenant={} err={}", tenantId, e.toString());
-            hit = java.util.Optional.empty();
+            hit = Optional.empty();
         }
         if (hit.isPresent()) {
             audit.record(tenantId, userId, cid, "cache", ms(start), hit.get().answer().length(), redactedQ);
@@ -220,22 +226,22 @@ public class AssistantController {
         AtomicBoolean mutated = new AtomicBoolean(false);
 
         Sinks.Many<String> statusSink = Sinks.many().unicast().onBackpressureBuffer();
-        java.util.function.Consumer<String> statusFn = statusSink::tryEmitNext;
+        Consumer<String> statusFn = statusSink::tryEmitNext;
 
-        List<PendingWidget> pendingWidgets = new java.util.concurrent.CopyOnWriteArrayList<>();
-        Sinks.Many<java.util.List<com.aegis.merged.domain.BankingService.Card>> cardsSink = Sinks.many().unicast().onBackpressureBuffer();
+        List<PendingWidget> pendingWidgets = new CopyOnWriteArrayList<>();
+        Sinks.Many<List<com.aegis.merged.domain.BankingService.Card>> cardsSink = Sinks.many().unicast().onBackpressureBuffer();
         var cardsFn = widgetChannel(cardsSink, pendingWidgets, "cards");
-        Sinks.Many<java.util.List<com.aegis.merged.domain.BankingService.Account>> accountsSink = Sinks.many().unicast().onBackpressureBuffer();
+        Sinks.Many<List<com.aegis.merged.domain.BankingService.Account>> accountsSink = Sinks.many().unicast().onBackpressureBuffer();
         var accountsFn = widgetChannel(accountsSink, pendingWidgets, "accounts");
-        Sinks.Many<java.util.List<com.aegis.merged.domain.BankingService.Transaction>> transactionsSink = Sinks.many().unicast().onBackpressureBuffer();
+        Sinks.Many<List<com.aegis.merged.domain.BankingService.Transaction>> transactionsSink = Sinks.many().unicast().onBackpressureBuffer();
         var transactionsFn = widgetChannel(transactionsSink, pendingWidgets, "transactions");
         Sinks.Many<com.aegis.merged.domain.BankingService.DisputeCase> casesSink = Sinks.many().unicast().onBackpressureBuffer();
         var casesFn = widgetChannel(casesSink, pendingWidgets, "case");
         Sinks.Many<com.aegis.merged.domain.BankingService.Approval> approvalsSink = Sinks.many().unicast().onBackpressureBuffer();
         var approvalsFn = widgetChannel(approvalsSink, pendingWidgets, "approval");
-        Sinks.Many<java.util.List<BankingTools.Citation>> citationsSink = Sinks.many().unicast().onBackpressureBuffer();
+        Sinks.Many<List<BankingTools.Citation>> citationsSink = Sinks.many().unicast().onBackpressureBuffer();
         var citationsFn = widgetChannel(citationsSink, pendingWidgets, "citations");
-        Sinks.Many<java.util.List<com.aegis.merged.domain.BankingService.LedgerEntry>> ledgerSink = Sinks.many().unicast().onBackpressureBuffer();
+        Sinks.Many<List<com.aegis.merged.domain.BankingService.LedgerEntry>> ledgerSink = Sinks.many().unicast().onBackpressureBuffer();
         var ledgerFn = widgetChannel(ledgerSink, pendingWidgets, "ledger");
         Sinks.Many<com.aegis.merged.domain.BankingService.CustomerProfile> profileSink = Sinks.many().unicast().onBackpressureBuffer();
         var profileFn = widgetChannel(profileSink, pendingWidgets, "profile");
@@ -266,7 +272,7 @@ public class AssistantController {
                 Map.entry(BankingTools.PROFILE_KEY, profileFn),
                 Map.entry(BankingTools.STATEMENT_KEY, statementFn));
 
-        java.util.function.Supplier<Flux<org.springframework.ai.chat.model.ChatResponse>> callModel =
+        Supplier<Flux<org.springframework.ai.chat.model.ChatResponse>> callModel =
                 () -> llmGuard.guard(model.prompt()
                 .system(sp -> sp.param("bankName", TenantNames.displayName(tenantId)))
                 .user(redactedInput)
@@ -394,7 +400,7 @@ public class AssistantController {
         }
     }
 
-    private <T> java.util.function.Consumer<T> widgetChannel(
+    private <T> Consumer<T> widgetChannel(
             Sinks.Many<T> sink, List<PendingWidget> pendingWidgets, String widgetType) {
         return value -> {
             sink.tryEmitNext(value);
@@ -439,7 +445,7 @@ public class AssistantController {
                 .map(state.filter::accept)
                 .concatMap(chunk -> Flux.fromIterable(drainBoundaries(state, chunk)));
         return chunks.concatWith(Mono.fromSupplier(() -> flushRemainder(state)).flux()
-                .filter(java.util.Objects::nonNull));
+                .filter(Objects::nonNull));
     }
 
     private List<ServerSentEvent<String>> drainBoundaries(StreamState state, String chunk) {

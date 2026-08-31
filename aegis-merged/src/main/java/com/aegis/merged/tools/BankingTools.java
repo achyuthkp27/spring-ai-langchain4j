@@ -11,6 +11,14 @@ import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
+import java.util.regex.Pattern;
 
 /**
  * {@link ConfirmationGuard} tokens provide argument binding, not human-in-the-loop consent: they
@@ -58,88 +66,88 @@ public class BankingTools {
     public record Citation(String source, String snippet) {
     }
 
-    public record SpendingSummary(String accountId, java.util.Map<String, java.math.BigDecimal> byCategory,
-                                  java.math.BigDecimal totalDebits, java.math.BigDecimal totalCredits) {
+    public record SpendingSummary(String accountId, Map<String, BigDecimal> byCategory,
+                                  BigDecimal totalDebits, BigDecimal totalCredits) {
     }
 
     @SuppressWarnings("unchecked")
     public static void status(ToolContext ctx, String message) {
-        if (ctx.getContext().get(STATUS_KEY) instanceof java.util.function.Consumer<?> c) {
-            ((java.util.function.Consumer<String>) c).accept(message);
+        if (ctx.getContext().get(STATUS_KEY) instanceof Consumer<?> c) {
+            ((Consumer<String>) c).accept(message);
         }
     }
 
     @SuppressWarnings("unchecked")
-    public static void emitCards(ToolContext ctx, java.util.List<BankingService.Card> cards) {
-        if (ctx.getContext().get(CARDS_KEY) instanceof java.util.function.Consumer<?> c) {
-            ((java.util.function.Consumer<java.util.List<BankingService.Card>>) c).accept(cards);
+    public static void emitCards(ToolContext ctx, List<BankingService.Card> cards) {
+        if (ctx.getContext().get(CARDS_KEY) instanceof Consumer<?> c) {
+            ((Consumer<List<BankingService.Card>>) c).accept(cards);
         }
     }
 
     @SuppressWarnings("unchecked")
-    public static void emitAccounts(ToolContext ctx, java.util.List<BankingService.Account> accounts) {
-        if (ctx.getContext().get(ACCOUNTS_KEY) instanceof java.util.function.Consumer<?> c) {
-            ((java.util.function.Consumer<java.util.List<BankingService.Account>>) c).accept(accounts);
+    public static void emitAccounts(ToolContext ctx, List<BankingService.Account> accounts) {
+        if (ctx.getContext().get(ACCOUNTS_KEY) instanceof Consumer<?> c) {
+            ((Consumer<List<BankingService.Account>>) c).accept(accounts);
         }
     }
 
     @SuppressWarnings("unchecked")
-    public static void emitTransactions(ToolContext ctx, java.util.List<BankingService.Transaction> txns) {
-        if (ctx.getContext().get(TRANSACTIONS_KEY) instanceof java.util.function.Consumer<?> c) {
-            ((java.util.function.Consumer<java.util.List<BankingService.Transaction>>) c).accept(txns);
+    public static void emitTransactions(ToolContext ctx, List<BankingService.Transaction> txns) {
+        if (ctx.getContext().get(TRANSACTIONS_KEY) instanceof Consumer<?> c) {
+            ((Consumer<List<BankingService.Transaction>>) c).accept(txns);
         }
     }
 
     @SuppressWarnings("unchecked")
     public static void emitCase(ToolContext ctx, BankingService.DisputeCase disputeCase) {
-        if (ctx.getContext().get(CASES_KEY) instanceof java.util.function.Consumer<?> c) {
-            ((java.util.function.Consumer<BankingService.DisputeCase>) c).accept(disputeCase);
+        if (ctx.getContext().get(CASES_KEY) instanceof Consumer<?> c) {
+            ((Consumer<BankingService.DisputeCase>) c).accept(disputeCase);
         }
     }
 
     @SuppressWarnings("unchecked")
     public static void emitApproval(ToolContext ctx, BankingService.Approval approval) {
-        if (ctx.getContext().get(APPROVALS_KEY) instanceof java.util.function.Consumer<?> c) {
-            ((java.util.function.Consumer<BankingService.Approval>) c).accept(approval);
+        if (ctx.getContext().get(APPROVALS_KEY) instanceof Consumer<?> c) {
+            ((Consumer<BankingService.Approval>) c).accept(approval);
         }
     }
 
     @SuppressWarnings("unchecked")
-    public static void emitCitations(ToolContext ctx, java.util.List<Citation> citations) {
-        if (ctx.getContext().get(CITATIONS_KEY) instanceof java.util.function.Consumer<?> c) {
-            ((java.util.function.Consumer<java.util.List<Citation>>) c).accept(citations);
+    public static void emitCitations(ToolContext ctx, List<Citation> citations) {
+        if (ctx.getContext().get(CITATIONS_KEY) instanceof Consumer<?> c) {
+            ((Consumer<List<Citation>>) c).accept(citations);
         }
     }
 
     @SuppressWarnings("unchecked")
-    public static void emitLedger(ToolContext ctx, java.util.List<BankingService.LedgerEntry> entries) {
-        if (ctx.getContext().get(LEDGER_KEY) instanceof java.util.function.Consumer<?> c) {
-            ((java.util.function.Consumer<java.util.List<BankingService.LedgerEntry>>) c).accept(entries);
+    public static void emitLedger(ToolContext ctx, List<BankingService.LedgerEntry> entries) {
+        if (ctx.getContext().get(LEDGER_KEY) instanceof Consumer<?> c) {
+            ((Consumer<List<BankingService.LedgerEntry>>) c).accept(entries);
         }
     }
 
     @SuppressWarnings("unchecked")
     public static void emitProfile(ToolContext ctx, BankingService.CustomerProfile profile) {
-        if (ctx.getContext().get(PROFILE_KEY) instanceof java.util.function.Consumer<?> c) {
-            ((java.util.function.Consumer<BankingService.CustomerProfile>) c).accept(profile);
+        if (ctx.getContext().get(PROFILE_KEY) instanceof Consumer<?> c) {
+            ((Consumer<BankingService.CustomerProfile>) c).accept(profile);
         }
     }
 
     @SuppressWarnings("unchecked")
     public static void emitStatement(ToolContext ctx, SpendingSummary summary) {
-        if (ctx.getContext().get(STATEMENT_KEY) instanceof java.util.function.Consumer<?> c) {
-            ((java.util.function.Consumer<SpendingSummary>) c).accept(summary);
+        if (ctx.getContext().get(STATEMENT_KEY) instanceof Consumer<?> c) {
+            ((Consumer<SpendingSummary>) c).accept(summary);
         }
     }
 
     public static void markFailed(ToolContext ctx) {
-        if (ctx.getContext().get(TOOL_FAILED_KEY) instanceof java.util.concurrent.atomic.AtomicBoolean b) {
+        if (ctx.getContext().get(TOOL_FAILED_KEY) instanceof AtomicBoolean b) {
             b.set(true);
         }
     }
 
     public static void markMutated(ToolContext ctx) {
-        if (ctx.getContext().get(MUTATED_KEY) instanceof java.util.concurrent.atomic.AtomicBoolean b) {
+        if (ctx.getContext().get(MUTATED_KEY) instanceof AtomicBoolean b) {
             b.set(true);
         }
     }
@@ -152,24 +160,24 @@ public class BankingTools {
             + "customer says yes, call this SAME tool again with this parameter set to that "
             + "exact code copied from the earlier reply. Do not leave it empty on that second call.";
 
-    private static final java.util.Set<String> MERCHANT_CATEGORIES = java.util.Set.of(
+    private static final Set<String> MERCHANT_CATEGORIES = Set.of(
             "GAMBLING", "INTERNATIONAL", "ONLINE", "ATM_CASH_ADVANCE", "ADULT_ENTERTAINMENT");
 
-    private static final java.util.regex.Pattern EMAIL_PATTERN =
-            java.util.regex.Pattern.compile("^[\\w.+-]+@[\\w-]+\\.[\\w.-]+$");
+    private static final Pattern EMAIL_PATTERN =
+            Pattern.compile("^[\\w.+-]+@[\\w-]+\\.[\\w.-]+$");
 
-    private static final java.util.regex.Pattern PHONE_PATTERN =
-            java.util.regex.Pattern.compile("^\\+?[0-9()\\-. ]{7,20}$");
+    private static final Pattern PHONE_PATTERN =
+            Pattern.compile("^\\+?[0-9()\\-. ]{7,20}$");
     private static final int MAX_NICKNAME_LENGTH = 40;
 
     private static final int MAX_TRAVEL_NOTICE_DAYS_AHEAD = 366;
     private static final int MAX_TRANSACTIONS_RETURNED = 20;
     private static final int MAX_CARDS_RETURNED = 20;
 
-    private static java.util.List<BankingService.Transaction> mostRecent(
-            java.util.List<BankingService.Transaction> txns, int limit) {
+    private static List<BankingService.Transaction> mostRecent(
+            List<BankingService.Transaction> txns, int limit) {
         return txns.stream()
-                .sorted(java.util.Comparator.comparing(BankingService.Transaction::date).reversed())
+                .sorted(Comparator.comparing(BankingService.Transaction::date).reversed())
                 .limit(limit)
                 .toList();
     }
@@ -189,7 +197,7 @@ public class BankingTools {
 
     private Principal principal(ToolContext ctx) {
 
-        if (ctx.getContext().get(DYNAMIC_ACCESS_KEY) instanceof java.util.concurrent.atomic.AtomicBoolean b) {
+        if (ctx.getContext().get(DYNAMIC_ACCESS_KEY) instanceof AtomicBoolean b) {
             b.set(true);
         }
         Object p = ctx.getContext().get(PRINCIPAL_KEY);
@@ -242,7 +250,7 @@ public class BankingTools {
         status(ctx, "Looking up balance for " + accountId + "…");
         var acct = ownedAccount(p, accountId);
         if (acct == null) { markFailed(ctx); return "No account found: " + accountId; }
-        emitAccounts(ctx, java.util.List.of(acct));
+        emitAccounts(ctx, List.of(acct));
         log.info("tool.lookupBalance user={} account={}", p.userId(), accountId);
         return "Account " + accountId + " (" + acct.type() + ") balance: $" + acct.balance();
     }
@@ -366,7 +374,7 @@ public class BankingTools {
         var frozen = banking.freezeCard(cardId);
         if (frozen == null) { markFailed(ctx); return "Card " + cardId + " no longer exists."; }
         markMutated(ctx);
-        emitCards(ctx, java.util.List.of(frozen));
+        emitCards(ctx, List.of(frozen));
         log.info("tool.freezeCard user={} card={} reason={}", p.userId(), cardId, reason);
         return "Card " + cardId + " (****" + frozen.last4() + ") is now FROZEN. Reason: " + reason
                 + ". A replacement can be ordered if needed.";
@@ -546,7 +554,7 @@ public class BankingTools {
                     "Transfer " + fromAccountId + " -> " + toAccountId);
             markMutated(ctx);
             emitLedger(ctx, entries);
-            emitAccounts(ctx, java.util.List.of(banking.getAccount(fromAccountId), banking.getAccount(toAccountId)));
+            emitAccounts(ctx, List.of(banking.getAccount(fromAccountId), banking.getAccount(toAccountId)));
             log.info("tool.transfer user={} from={} to={} amount={}", p.userId(), fromAccountId, toAccountId, amt);
             return "Transferred $" + amt + " from " + fromAccountId + " to " + toAccountId + ". New balance on "
                     + fromAccountId + ": $" + banking.getAccount(fromAccountId).balance() + ".";
@@ -569,7 +577,7 @@ public class BankingTools {
         if (all.isEmpty()) { markFailed(ctx); return "No transactions to summarize for " + accountId; }
         var list = mostRecent(all, MAX_TRANSACTIONS_RETURNED);
 
-        var byCategory = new java.util.TreeMap<String, BigDecimal>();
+        var byCategory = new TreeMap<String, BigDecimal>();
         BigDecimal debits = BigDecimal.ZERO;
         BigDecimal credits = BigDecimal.ZERO;
         for (var t : list) {
@@ -626,7 +634,7 @@ public class BankingTools {
         var updated = banking.unfreezeCard(cardId);
         if (updated == null) { markFailed(ctx); return "Card " + cardId + " no longer exists."; }
         markMutated(ctx);
-        emitCards(ctx, java.util.List.of(updated));
+        emitCards(ctx, List.of(updated));
         log.info("tool.unfreezeCard user={} card={}", p.userId(), cardId);
         return "Card " + cardId + " (****" + updated.last4() + ") is now ACTIVE.";
     }
@@ -671,7 +679,7 @@ public class BankingTools {
         var updated = banking.setSpendingLimit(cardId, parsed);
         if (updated == null) { markFailed(ctx); return "Card " + cardId + " no longer exists."; }
         markMutated(ctx);
-        emitCards(ctx, java.util.List.of(updated));
+        emitCards(ctx, List.of(updated));
         log.info("tool.setCardSpendingLimit user={} card={} limit={}", p.userId(), cardId, parsed);
         return parsed == null
                 ? "Spending limit removed from card " + cardId + "."
@@ -714,7 +722,7 @@ public class BankingTools {
         var updated = banking.toggleMerchantCategory(cardId, normalizedCategory, blocked);
         if (updated == null) { markFailed(ctx); return "Card " + cardId + " no longer exists."; }
         markMutated(ctx);
-        emitCards(ctx, java.util.List.of(updated));
+        emitCards(ctx, List.of(updated));
         log.info("tool.toggleMerchantCategoryBlock user={} card={} category={} blocked={}",
                 p.userId(), cardId, normalizedCategory, blocked);
         return "Card " + cardId + " " + (blocked ? "now blocks" : "no longer blocks") + " " + normalizedCategory + ".";
@@ -773,7 +781,7 @@ public class BankingTools {
         var updated = banking.renameAccount(accountId, nickname.strip());
         if (updated == null) { markFailed(ctx); return "Account " + accountId + " no longer exists."; }
         markMutated(ctx);
-        emitAccounts(ctx, java.util.List.of(updated));
+        emitAccounts(ctx, List.of(updated));
         log.info("tool.renameAccount user={} account={} nickname={}", p.userId(), accountId, nickname);
         return "Account " + accountId + " is now labeled \"" + nickname + "\".";
     }

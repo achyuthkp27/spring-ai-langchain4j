@@ -35,6 +35,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.LongAdder;
+import java.util.HashMap;
 
 @Component
 public class AuditTrail {
@@ -336,7 +337,7 @@ public class AuditTrail {
             if (e.at().isBefore(cutoff)) continue;
             if (tenant != null && !tenant.equals(e.tenant())) continue;
             Instant min = e.at().truncatedTo(ChronoUnit.MINUTES);
-            buckets.computeIfAbsent(min, k -> new java.util.HashMap<>())
+            buckets.computeIfAbsent(min, k -> new HashMap<>())
                    .merge(bucketKey(e.source()), 1L, Long::sum);
         }
         List<Map<String, Object>> out = new ArrayList<>();

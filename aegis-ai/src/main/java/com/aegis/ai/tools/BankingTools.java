@@ -11,6 +11,8 @@ import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 @Component
 public class BankingTools {
@@ -24,8 +26,8 @@ public class BankingTools {
 
     @SuppressWarnings("unchecked")
     public static void status(ToolContext ctx, String message) {
-        if (ctx.getContext().get(STATUS_KEY) instanceof java.util.function.Consumer<?> c) {
-            ((java.util.function.Consumer<String>) c).accept(message);
+        if (ctx.getContext().get(STATUS_KEY) instanceof Consumer<?> c) {
+            ((Consumer<String>) c).accept(message);
         }
     }
 
@@ -39,7 +41,7 @@ public class BankingTools {
 
     private Principal principal(ToolContext ctx) {
 
-        if (ctx.getContext().get(DYNAMIC_ACCESS_KEY) instanceof java.util.concurrent.atomic.AtomicBoolean b) {
+        if (ctx.getContext().get(DYNAMIC_ACCESS_KEY) instanceof AtomicBoolean b) {
             b.set(true);
         }
         Object p = ctx.getContext().get(PRINCIPAL_KEY);

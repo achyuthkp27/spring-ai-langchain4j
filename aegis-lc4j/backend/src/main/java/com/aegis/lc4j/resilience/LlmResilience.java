@@ -18,6 +18,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+import java.util.concurrent.TimeoutException;
 
 @Component
 public class LlmResilience {
@@ -101,7 +102,7 @@ public class LlmResilience {
             if (done) return;
             long idleNanos = System.nanoTime() - lastActivityNanos;
             if (idleNanos > STREAM_IDLE_TIMEOUT.toNanos()) {
-                failure(new java.util.concurrent.TimeoutException("stream idle timeout"));
+                failure(new TimeoutException("stream idle timeout"));
                 onIdleTimeout.run();
             }
         }

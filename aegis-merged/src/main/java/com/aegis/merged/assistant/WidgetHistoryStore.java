@@ -13,6 +13,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.Collections;
 
 @Component
 public class WidgetHistoryStore {
@@ -97,7 +98,7 @@ public class WidgetHistoryStore {
                 rs -> {
                     out.add(new WidgetRow(rs.getInt("turn_seq"), rs.getString("widget_type"), rs.getString("payload")));
                 }, conversationId, MAX_WIDGET_ROWS_LOADED);
-        java.util.Collections.reverse(out);
+        Collections.reverse(out);
         return out;
     }
 

@@ -14,6 +14,8 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.ArrayList;
+import java.util.regex.Pattern;
 
 @Component
 public class GuardrailAdvisor implements CallAdvisor {
@@ -67,7 +69,7 @@ public class GuardrailAdvisor implements CallAdvisor {
         if (!redacted.equals(userText)) {
             log.info("guardrail.pii.redacted tenant={}", tenant);
 
-            var msgs = new java.util.ArrayList<>(request.prompt().getInstructions());
+            var msgs = new ArrayList<>(request.prompt().getInstructions());
             for (int i = msgs.size() - 1; i >= 0; i--) {
                 if (msgs.get(i) instanceof UserMessage) {
                     msgs.set(i, new UserMessage(redacted));
@@ -106,7 +108,7 @@ public class GuardrailAdvisor implements CallAdvisor {
         return response;
     }
 
-    private static final java.util.regex.Pattern TOOL_CALL_SHAPE = java.util.regex.Pattern.compile(
+    private static final Pattern TOOL_CALL_SHAPE = Pattern.compile(
             "\\{\\s*\"name\"\\s*:\\s*\"[^\"]*\"\\s*,\\s*\"(parameters|arguments)\"\\s*:\\s*\\{");
 
     public static boolean looksLikeLeakedToolCall(String text) {

@@ -11,6 +11,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.Comparator;
+import java.util.HashSet;
 
 @Service
 public class BankingService {
@@ -89,14 +91,14 @@ public class BankingService {
     public List<Account> accountsOf(String tenantId, String ownerUserId) {
         return accounts.values().stream()
                 .filter(a -> a.tenantId().equals(tenantId) && a.ownerUserId().equals(ownerUserId))
-                .sorted(java.util.Comparator.comparing(Account::accountId))
+                .sorted(Comparator.comparing(Account::accountId))
                 .toList();
     }
 
     public List<Account> allAccountsForTenant(String tenantId) {
         return accounts.values().stream()
                 .filter(a -> a.tenantId().equals(tenantId))
-                .sorted(java.util.Comparator.comparing(Account::accountId))
+                .sorted(Comparator.comparing(Account::accountId))
                 .toList();
     }
 
@@ -121,7 +123,7 @@ public class BankingService {
     public List<Card> getCards(String accountId) {
         return cards.values().stream()
                 .filter(c -> c.accountId().equals(accountId))
-                .sorted(java.util.Comparator.comparing(Card::cardId))
+                .sorted(Comparator.comparing(Card::cardId))
                 .toList();
     }
 
@@ -149,7 +151,7 @@ public class BankingService {
 
     public Card toggleMerchantCategory(String cardId, String category, boolean blocked) {
         return cards.computeIfPresent(cardId, (k, c) -> {
-            var updated = new java.util.HashSet<>(c.blockedCategories());
+            var updated = new HashSet<>(c.blockedCategories());
             if (blocked) updated.add(category.toUpperCase());
             else updated.remove(category.toUpperCase());
             return new Card(c.cardId(), c.accountId(), c.type(), c.network(), c.last4(), c.status(),

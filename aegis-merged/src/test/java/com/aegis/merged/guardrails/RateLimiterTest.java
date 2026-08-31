@@ -11,6 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import java.util.List;
 
 class RateLimiterTest {
 
@@ -65,7 +66,7 @@ class RateLimiterTest {
     @DisplayName("A Redis failure degrades to the local bucket instead of failing the request")
     void redisFailureFallsBackToLocal() {
         StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
-        when(redisTemplate.execute(any(RedisScript.class), any(java.util.List.class), any(), any(), any()))
+        when(redisTemplate.execute(any(RedisScript.class), any(List.class), any(), any(), any()))
                 .thenThrow(new RuntimeException("connection refused"));
 
         var limiter = new RateLimiter(Optional.of(redisTemplate), 5, 1.0, 200, 10.0);

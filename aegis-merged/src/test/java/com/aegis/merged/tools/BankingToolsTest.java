@@ -17,6 +17,7 @@ import java.util.regex.Pattern;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
+import java.math.BigDecimal;
 
 class BankingToolsTest {
 
@@ -268,8 +269,8 @@ class BankingToolsTest {
             + "the same category must not inflate it")
     void spendingSummaryDoesNotMixCreditsIntoCategoryTotals() {
         BankingService banking = new BankingService();
-        banking.transfer("ACC-1001", "ACC-1002", new java.math.BigDecimal("100.00"), "test-out");
-        banking.transfer("ACC-1002", "ACC-1001", new java.math.BigDecimal("100.00"), "test-in");
+        banking.transfer("ACC-1001", "ACC-1002", new BigDecimal("100.00"), "test-out");
+        banking.transfer("ACC-1002", "ACC-1001", new BigDecimal("100.00"), "test-in");
 
         var freshTools = new BankingTools(banking, new AuditTrail(mock(JdbcTemplate.class)),
                 new com.aegis.merged.kyc.MockKycProvider(), new ConfirmationGuard());

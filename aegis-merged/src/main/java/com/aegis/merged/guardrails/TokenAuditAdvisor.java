@@ -12,6 +12,7 @@ import org.springframework.ai.chat.client.advisor.api.StreamAdvisorChain;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Component
 public class TokenAuditAdvisor implements CallAdvisor, StreamAdvisor {
@@ -55,8 +56,8 @@ public class TokenAuditAdvisor implements CallAdvisor, StreamAdvisor {
     public Flux<ChatClientResponse> adviseStream(ChatClientRequest request, StreamAdvisorChain chain) {
         long start = System.nanoTime();
 
-        var lastUsage = new java.util.concurrent.atomic.AtomicReference<Usage>();
-        var model = new java.util.concurrent.atomic.AtomicReference<>("unknown");
+        var lastUsage = new AtomicReference<Usage>();
+        var model = new AtomicReference<>("unknown");
         return chain.nextStream(request)
                 .doOnNext(r -> {
                     var cr = r.chatResponse();

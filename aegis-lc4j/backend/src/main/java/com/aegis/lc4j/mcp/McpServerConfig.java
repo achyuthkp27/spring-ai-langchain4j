@@ -19,16 +19,17 @@ import org.springframework.web.servlet.function.ServerResponse;
 
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.Map;
 
 @Configuration
 public class McpServerConfig {
 
     private static final McpSchema.JsonSchema SEARCH_SCHEMA = new McpSchema.JsonSchema(
             "object",
-            java.util.Map.of(
-                    "tenantId", java.util.Map.of("type", "string",
+            Map.of(
+                    "tenantId", Map.of("type", "string",
                             "description", "tenant whose policies to search, e.g. achu-bank"),
-                    "query", java.util.Map.of("type", "string",
+                    "query", Map.of("type", "string",
                             "description", "the policy question")),
             List.of("tenantId", "query"),
             false, null, null);

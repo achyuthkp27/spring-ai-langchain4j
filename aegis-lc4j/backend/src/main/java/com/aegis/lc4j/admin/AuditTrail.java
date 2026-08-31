@@ -13,6 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
+import java.util.HashMap;
 
 @Component
 public class AuditTrail {
@@ -102,7 +103,7 @@ public class AuditTrail {
         for (Event e : events) {
             if (e.at().isBefore(cutoff)) continue;
             Instant min = e.at().truncatedTo(ChronoUnit.MINUTES);
-            buckets.computeIfAbsent(min, k -> new java.util.HashMap<>())
+            buckets.computeIfAbsent(min, k -> new HashMap<>())
                    .merge(bucketKey(e.source()), 1L, Long::sum);
         }
         List<Map<String, Object>> out = new ArrayList<>();

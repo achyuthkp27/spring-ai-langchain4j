@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 @Component
 public class ScopeGate {
@@ -36,13 +37,13 @@ public class ScopeGate {
             "what is this", "whats this", "what is achu", "what is finbot",
             "what is achu finbot", "whats achu finbot");
 
-    private static final java.util.regex.Pattern DOMAIN_FASTPATH = java.util.regex.Pattern.compile(
+    private static final Pattern DOMAIN_FASTPATH = Pattern.compile(
             "\\b(acc|txn|case|apr|crd)-\\d+\\b"
             + "|\\b(balance|transactions?|disputes?|chargebacks?|representment|kyc|edd"
             + "|provisional credit|dispute case|refunds?|account|merchant"
             + "|cards?|overdrafts?|wire|transfers?|remittance|statements?|cheque|atm"
             + "|interest rate|deposits?|withdrawals?|standing order|direct debit)\\b",
-            java.util.regex.Pattern.CASE_INSENSITIVE);
+            Pattern.CASE_INSENSITIVE);
 
     private static final String CLASSIFIER_PROMPT = """
             You are a scope classifier for a bank's customer-service assistant.

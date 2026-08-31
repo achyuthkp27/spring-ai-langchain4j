@@ -12,6 +12,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import java.util.List;
 
 @Testcontainers
 @EnabledIfEnvironmentVariable(named = "RUN_CONTAINER_TESTS", matches = "true")
@@ -82,7 +83,7 @@ class WidgetHistoryStoreTurnAlignmentTest {
         assertThat(rows.get(0).widgetType()).isEqualTo("cards");
     }
 
-    private java.util.List<WidgetHistoryStore.WidgetRow> waitForWidgetRows(String key, int expected)
+    private List<WidgetHistoryStore.WidgetRow> waitForWidgetRows(String key, int expected)
             throws InterruptedException {
         for (int i = 0; i < 100; i++) {
             var rows = store.loadForConversation(key);

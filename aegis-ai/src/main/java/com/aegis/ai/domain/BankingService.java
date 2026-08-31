@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.Comparator;
 
 @Service
 public class BankingService {
@@ -80,7 +81,7 @@ public class BankingService {
     public List<Card> getCards(String accountId) {
         return cards.values().stream()
                 .filter(c -> c.accountId().equals(accountId))
-                .sorted(java.util.Comparator.comparing(Card::cardId))
+                .sorted(Comparator.comparing(Card::cardId))
                 .toList();
     }
 
