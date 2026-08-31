@@ -18,7 +18,7 @@
     <description>AegisAI — Financial Operations Copilot &amp; Agent Platform (Spring AI)</description>
 
     <properties>
-        <java.version>17</java.version>
+        <java.version>21</java.version>
         <spring-ai.version>1.1.8</spring-ai.version>
     </properties>
 
