@@ -5,7 +5,10 @@ import com.aegis.merged.guardrails.TokenAuditAdvisor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.ollama.api.OllamaChatOptions;
+import org.springframework.ai.ollama.api.ThinkOption;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -23,14 +26,20 @@ public class RagConfig {
     @Bean
     @Qualifier("ragClient")
     ChatClient ragClient(ChatClient.Builder builder, TokenAuditAdvisor tokenAudit,
-                        GuardrailAdvisor guardrails, ChatMemory chatMemory) {
-        return builder
-                .defaultSystem(RAG_SYSTEM_PROMPT)
+                        GuardrailAdvisor guardrails, ChatMemory chatMemory,
+                        @Value("${aegis.llm.think:}") String think) {
+        builder.defaultSystem(RAG_SYSTEM_PROMPT)
                 .defaultAdvisors(
                         tokenAudit,
                         guardrails,
-                        
-                        MessageChatMemoryAdvisor.builder(chatMemory).build())
-                .build();
+
+                        MessageChatMemoryAdvisor.builder(chatMemory).build());
+
+        if (!think.isBlank()) {
+            builder.defaultOptions(OllamaChatOptions.builder()
+                    .thinkOption(new ThinkOption.ThinkBoolean(Boolean.parseBoolean(think)))
+                    .build());
+        }
+        return builder.build();
     }
 }
