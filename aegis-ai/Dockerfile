@@ -1,7 +1,7 @@
 # Multi-stage build: compile with Maven, ship only the JRE + jar.
 # Keeps the runtime image small and free of build tooling / source.
 
-FROM maven:3.9-eclipse-temurin-17 AS build
+FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /app
 
 # Dependencies first so they cache across source-only changes.
@@ -11,7 +11,7 @@ RUN mvn -B dependency:go-offline
 COPY src src
 RUN mvn -B package -DskipTests
 
-FROM eclipse-temurin:17-jre-jammy
+FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 
 # Don't run the app as root inside the container.
