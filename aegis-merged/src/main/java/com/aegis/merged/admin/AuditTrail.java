@@ -36,6 +36,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.HashMap;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.AbstractPlatformTransactionManager;
+import org.springframework.transaction.support.DefaultTransactionStatus;
 
 @Component
 public class AuditTrail {
@@ -89,22 +92,22 @@ public class AuditTrail {
     }
 
     private static final class NoOpTransactionManager
-            extends org.springframework.transaction.support.AbstractPlatformTransactionManager {
+            extends AbstractPlatformTransactionManager {
         @Override
         protected Object doGetTransaction() {
             return new Object();
         }
 
         @Override
-        protected void doBegin(Object transaction, org.springframework.transaction.TransactionDefinition definition) {
+        protected void doBegin(Object transaction, TransactionDefinition definition) {
         }
 
         @Override
-        protected void doCommit(org.springframework.transaction.support.DefaultTransactionStatus status) {
+        protected void doCommit(DefaultTransactionStatus status) {
         }
 
         @Override
-        protected void doRollback(org.springframework.transaction.support.DefaultTransactionStatus status) {
+        protected void doRollback(DefaultTransactionStatus status) {
         }
     }
 

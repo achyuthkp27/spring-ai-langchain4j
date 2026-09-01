@@ -20,6 +20,7 @@ import org.springframework.web.servlet.function.ServerResponse;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.Map;
+import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
 
 @Configuration
 public class McpServerConfig {
@@ -37,7 +38,7 @@ public class McpServerConfig {
     @Bean
     WebMvcSseServerTransportProvider mcpTransport(ObjectMapper objectMapper) {
         return WebMvcSseServerTransportProvider.builder()
-                .jsonMapper(new io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper(objectMapper))
+                .jsonMapper(new JacksonMcpJsonMapper(objectMapper))
                 .messageEndpoint("/mcp/message")
                 .sseEndpoint("/sse")
                 .build();

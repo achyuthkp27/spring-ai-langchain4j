@@ -9,16 +9,17 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.ai.vectorstore.VectorStore;
 
 @RestController
 @RequestMapping("/api/rag")
 public class RagController {
 
     private final ChatClient ragClient;
-    private final org.springframework.ai.vectorstore.VectorStore vectorStore;
+    private final VectorStore vectorStore;
 
     public RagController(@Qualifier("ragClient") ChatClient ragClient,
-                         org.springframework.ai.vectorstore.VectorStore vectorStore) {
+                         VectorStore vectorStore) {
         this.ragClient = ragClient;
         this.vectorStore = vectorStore;
     }

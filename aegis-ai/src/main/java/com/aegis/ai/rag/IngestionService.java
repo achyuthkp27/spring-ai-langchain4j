@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.springframework.ai.vectorstore.SearchRequest;
 
 @Service
 public class IngestionService {
@@ -34,10 +35,10 @@ public class IngestionService {
         semanticCache.clear();
 
         try {
-            var all = vectorStore.similaritySearch(org.springframework.ai.vectorstore.SearchRequest.builder()
+            var all = vectorStore.similaritySearch(SearchRequest.builder()
                     .query("*").topK(10_000).similarityThreshold(0.0).build());
             if (all != null && !all.isEmpty()) {
-                vectorStore.delete(all.stream().map(org.springframework.ai.document.Document::getId).toList());
+                vectorStore.delete(all.stream().map(Document::getId).toList());
                 log.info("ingest cleared existing chunks={}", all.size());
             }
         } catch (Exception e) {

@@ -17,6 +17,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
+import org.springframework.ai.ollama.api.OllamaChatOptions;
+import org.springframework.ai.ollama.api.ThinkOption;
 
 @Component
 public class ScopeGate {
@@ -81,9 +83,9 @@ public class ScopeGate {
 
         ChatOptions options;
         if (think != null && !think.isBlank()) {
-            var b = org.springframework.ai.ollama.api.OllamaChatOptions.builder()
+            var b = OllamaChatOptions.builder()
                     .temperature(0.0).numPredict(4)
-                    .thinkOption(new org.springframework.ai.ollama.api.ThinkOption.ThinkBoolean(
+                    .thinkOption(new ThinkOption.ThinkBoolean(
                             Boolean.parseBoolean(think)));
             if (classifierModel != null && !classifierModel.isBlank()) b.model(classifierModel);
             options = b.build();

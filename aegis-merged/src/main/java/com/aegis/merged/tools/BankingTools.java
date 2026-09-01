@@ -19,6 +19,9 @@ import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
+import com.aegis.merged.admin.AuditTrail;
+import com.aegis.merged.kyc.KycProvider;
+import java.time.LocalDate;
 
 /**
  * {@link ConfirmationGuard} tokens provide argument binding, not human-in-the-loop consent: they
@@ -183,12 +186,12 @@ public class BankingTools {
     }
 
     private final BankingService banking;
-    private final com.aegis.merged.admin.AuditTrail audit;
-    private final com.aegis.merged.kyc.KycProvider kyc;
+    private final AuditTrail audit;
+    private final KycProvider kyc;
     private final ConfirmationGuard confirmationGuard;
 
-    public BankingTools(BankingService banking, com.aegis.merged.admin.AuditTrail audit,
-                        com.aegis.merged.kyc.KycProvider kyc, ConfirmationGuard confirmationGuard) {
+    public BankingTools(BankingService banking, AuditTrail audit,
+                        KycProvider kyc, ConfirmationGuard confirmationGuard) {
         this.banking = banking;
         this.audit = audit;
         this.kyc = kyc;
@@ -842,13 +845,13 @@ public class BankingTools {
         var p = principal(ctx);
         require(p, "profile:write");
         audit.toolCalled("setTravelNotice", p.tenantId());
-        java.time.LocalDate untilDate;
+        LocalDate untilDate;
         try {
-            untilDate = java.time.LocalDate.parse(until);
+            untilDate = LocalDate.parse(until);
         } catch (Exception e) {
             return "That doesn't look like a valid date (use YYYY-MM-DD).";
         }
-        java.time.LocalDate today = java.time.LocalDate.now();
+        LocalDate today = LocalDate.now();
         if (untilDate.isBefore(today)) {
             return "That date is in the past — a travel notice needs a future end date.";
         }

@@ -20,6 +20,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
 
 @SpringBootTest(properties = {
         "spring.docker.compose.enabled=false",
@@ -76,11 +78,11 @@ class SecurityWiringTest {
     @Test
     void aForgedTokenIsRejected() throws Exception {
 
-        String forged = io.jsonwebtoken.Jwts.builder()
+        String forged = Jwts.builder()
                 .subject("attacker")
                 .claim("tenantId", "achu-bank")
                 .claim("role", "admin")
-                .signWith(io.jsonwebtoken.security.Keys.hmacShaKeyFor(
+                .signWith(Keys.hmacShaKeyFor(
                         "a-completely-different-256-bit-secret-nobody-configured!!".getBytes()))
                 .compact();
 

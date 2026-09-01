@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 
 @RestController
 @RequestMapping("/api/rag")
@@ -60,7 +61,7 @@ public class AdvancedRagController {
                 .similarityThreshold(0.1)
                 
                 .filterExpression(() ->
-                        new org.springframework.ai.vectorstore.filter.FilterExpressionBuilder()
+                        new FilterExpressionBuilder()
                                 .eq("tenantId", tenantId).build())
                 .build();
 

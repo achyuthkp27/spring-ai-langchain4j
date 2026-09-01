@@ -35,6 +35,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import com.aegis.lc4j.security.AccessDeniedException;
 
 @RestController
 @RequestMapping("/api/assistant")
@@ -246,7 +247,7 @@ public class AssistantController {
             if (!finished.compareAndSet(false, true)) return;
             call.failure(err);
             log.warn("assistant.stream.error {}", err.toString());
-            String msg = err instanceof com.aegis.lc4j.security.AccessDeniedException
+            String msg = err instanceof AccessDeniedException
                     ? "I couldn't do that: " + err.getMessage()
                     : LlmResilience.TIMEOUT_MESSAGE;
             audit.record(tenantId, userId, cid, "error", ms(start), 0, redactedQ);

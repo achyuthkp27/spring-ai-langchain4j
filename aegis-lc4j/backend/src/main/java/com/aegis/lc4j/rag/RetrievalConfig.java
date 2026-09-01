@@ -6,6 +6,7 @@ import dev.langchain4j.store.embedding.pgvector.PgVectorEmbeddingStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import java.net.URI;
 
 @Configuration
 public class RetrievalConfig {
@@ -16,7 +17,7 @@ public class RetrievalConfig {
             @Value("${spring.datasource.username}") String user,
             @Value("${spring.datasource.password}") String password) {
         
-        var uri = java.net.URI.create(jdbcUrl.substring("jdbc:".length()));
+        var uri = URI.create(jdbcUrl.substring("jdbc:".length()));
         String database = uri.getPath().replaceFirst("/", "");
         return PgVectorEmbeddingStore.builder()
                 .host(uri.getHost())

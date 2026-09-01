@@ -13,15 +13,17 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Component;
 
 import java.util.stream.Collectors;
+import com.aegis.ai.admin.AuditTrail;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 
 @Component
 public class PolicySearchTool {
 
     private static final Logger log = LoggerFactory.getLogger(PolicySearchTool.class);
     private final VectorStore vectorStore;
-    private final com.aegis.ai.admin.AuditTrail audit;
+    private final AuditTrail audit;
 
-    public PolicySearchTool(VectorStore vectorStore, com.aegis.ai.admin.AuditTrail audit) {
+    public PolicySearchTool(VectorStore vectorStore, AuditTrail audit) {
         this.vectorStore = vectorStore;
         this.audit = audit;
     }
@@ -40,7 +42,7 @@ public class PolicySearchTool {
         audit.toolCalled("searchPolicies", tenantId);
         BankingTools.status(ctx, "Searching policy documents…");
 
-        var filter = new org.springframework.ai.vectorstore.filter.FilterExpressionBuilder()
+        var filter = new FilterExpressionBuilder()
                 .eq("tenantId", tenantId).build();
         var results = vectorStore.similaritySearch(SearchRequest.builder()
                 .query(query)

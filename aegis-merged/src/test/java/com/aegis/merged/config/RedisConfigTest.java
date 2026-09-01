@@ -10,6 +10,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 
 @Testcontainers
 @EnabledIfEnvironmentVariable(named = "RUN_CONTAINER_TESTS", matches = "true")
@@ -27,7 +28,7 @@ class RedisConfigTest {
         RedisConfig config = new RedisConfig();
         RedisConnectionFactory factory = config.redisConnectionFactory(
                 redis.getHost(), redis.getMappedPort(6379), "", PASSWORD);
-        if (factory instanceof org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory lettuce) {
+        if (factory instanceof LettuceConnectionFactory lettuce) {
             lettuce.afterPropertiesSet();
         }
 

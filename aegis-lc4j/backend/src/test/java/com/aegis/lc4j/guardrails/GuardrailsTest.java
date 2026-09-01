@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Assertions;
 
 class GuardrailsTest {
 
@@ -55,7 +56,7 @@ class GuardrailsTest {
         guard.setBudget("t1", 100);
         guard.checkOrThrow("t1");
         guard.record("t1", 100);
-        org.junit.jupiter.api.Assertions.assertThrows(BudgetGuard.BudgetExceededException.class,
+        Assertions.assertThrows(BudgetGuard.BudgetExceededException.class,
                 () -> guard.checkOrThrow("t1"));
     }
 }

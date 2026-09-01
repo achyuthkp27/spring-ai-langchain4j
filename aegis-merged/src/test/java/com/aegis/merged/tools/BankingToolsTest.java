@@ -18,6 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import java.math.BigDecimal;
+import com.aegis.merged.kyc.MockKycProvider;
+import com.aegis.merged.security.AccessDeniedException;
 
 class BankingToolsTest {
 
@@ -30,7 +32,7 @@ class BankingToolsTest {
     void setUp() {
         BankingService banking = new BankingService();
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        tools = new BankingTools(banking, new AuditTrail(jdbc), new com.aegis.merged.kyc.MockKycProvider(),
+        tools = new BankingTools(banking, new AuditTrail(jdbc), new MockKycProvider(),
                 new ConfirmationGuard());
 
         demoUser = new Principal("demo-user", "achu-bank", JwtService.permissionsFor("customer"));
@@ -161,7 +163,7 @@ class BankingToolsTest {
     @Test
     @DisplayName("A customer cannot transfer into an account they don't own")
     void transferRejectsForeignDestination() {
-        assertThrows(com.aegis.merged.security.AccessDeniedException.class,
+        assertThrows(AccessDeniedException.class,
                 () -> tools.transferBetweenOwnAccounts("ACC-1001", "ACC-9001", "10", null, ctxFor(demoUser)));
         assertThat(tools.lookupBalance("ACC-1001", ctxFor(demoUser))).contains("2500.00");
     }
@@ -273,7 +275,7 @@ class BankingToolsTest {
         banking.transfer("ACC-1002", "ACC-1001", new BigDecimal("100.00"), "test-in");
 
         var freshTools = new BankingTools(banking, new AuditTrail(mock(JdbcTemplate.class)),
-                new com.aegis.merged.kyc.MockKycProvider(), new ConfirmationGuard());
+                new MockKycProvider(), new ConfirmationGuard());
 
         String result = freshTools.getSpendingSummary("ACC-1001", ctxFor(demoUser));
 

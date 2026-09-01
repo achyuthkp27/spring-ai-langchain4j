@@ -20,6 +20,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import java.util.List;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mockito;
 
 class PolicySearchToolTenantIsolationTest {
 
@@ -38,7 +40,7 @@ class PolicySearchToolTenantIsolationTest {
 
         tool.searchPolicies("what is globex-bank's dispute deadline?", ctxFor("achu-bank", "u1"));
 
-        var captor = org.mockito.ArgumentCaptor.forClass(SearchRequest.class);
+        var captor = ArgumentCaptor.forClass(SearchRequest.class);
         verify(vectorStore).similaritySearch(captor.capture());
 
         var expected = new FilterExpressionBuilder().eq("tenantId", "achu-bank").build();
@@ -55,8 +57,8 @@ class PolicySearchToolTenantIsolationTest {
         tool.searchPolicies("dispute deadline", ctxFor("achu-bank", "u1"));
         tool.searchPolicies("dispute deadline", ctxFor("globex-bank", "u2"));
 
-        var captor = org.mockito.ArgumentCaptor.forClass(SearchRequest.class);
-        verify(vectorStore, org.mockito.Mockito.times(2)).similaritySearch(captor.capture());
+        var captor = ArgumentCaptor.forClass(SearchRequest.class);
+        verify(vectorStore, Mockito.times(2)).similaritySearch(captor.capture());
 
         var achuFilter = new FilterExpressionBuilder().eq("tenantId", "achu-bank").build();
         var globexFilter = new FilterExpressionBuilder().eq("tenantId", "globex-bank").build();

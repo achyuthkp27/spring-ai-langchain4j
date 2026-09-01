@@ -13,6 +13,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.springframework.ai.document.Document;
 
 @SpringBootTest(properties = {
         "spring.docker.compose.enabled=false",
@@ -29,7 +30,7 @@ class RagEvaluationTest {
     private EvaluationResponse evaluate(RelevancyEvaluator evaluator, String question, String context, String answer) {
         var request = new EvaluationRequest(
                 question,
-                List.of(new org.springframework.ai.document.Document(context)),
+                List.of(new Document(context)),
                 answer);
         return evaluator.evaluate(request);
     }

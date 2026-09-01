@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Assertions;
 
 class GuardrailsOwaspTest {
 
@@ -66,7 +67,7 @@ class GuardrailsOwaspTest {
         budget.setBudget("tiny-tenant", 100);
         budget.checkOrThrow("tiny-tenant");           
         budget.record("tiny-tenant", 150);            
-        org.junit.jupiter.api.Assertions.assertThrows(
+        Assertions.assertThrows(
                 BudgetGuard.BudgetExceededException.class,
                 () -> budget.checkOrThrow("tiny-tenant"));
     }

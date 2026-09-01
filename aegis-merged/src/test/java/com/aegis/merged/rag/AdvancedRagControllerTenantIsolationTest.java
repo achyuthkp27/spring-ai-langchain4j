@@ -24,6 +24,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
+import org.springframework.ai.chat.prompt.Prompt;
 
 class AdvancedRagControllerTenantIsolationTest {
 
@@ -43,7 +46,7 @@ class AdvancedRagControllerTenantIsolationTest {
             + "never a caller-supplied one")
     void filterIsScopedToTheCallersOwnTenant() {
         ChatModel chatModel = mock(ChatModel.class);
-        when(chatModel.call(any(org.springframework.ai.chat.prompt.Prompt.class)))
+        when(chatModel.call(any(Prompt.class)))
                 .thenReturn(new ChatResponse(List.of(new Generation(new AssistantMessage("answer")))));
         ChatClient.Builder builder = ChatClient.builder(chatModel);
         ChatClient ragClient = builder.build();
@@ -52,7 +55,7 @@ class AdvancedRagControllerTenantIsolationTest {
         when(vectorStore.similaritySearch(any(SearchRequest.class))).thenReturn(List.of());
 
         SemanticCache semanticCache = mock(SemanticCache.class);
-        when(semanticCache.lookup(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+        when(semanticCache.lookup(ArgumentMatchers.anyString(), ArgumentMatchers.anyString()))
                 .thenReturn(Optional.empty());
 
         var controller = new AdvancedRagController(ragClient, builder, vectorStore, semanticCache);
@@ -60,7 +63,7 @@ class AdvancedRagControllerTenantIsolationTest {
         authenticateAs("achu-bank", "u1");
         controller.ask(new AdvancedRagController.AskRequest("c1", "what is globex-bank's dispute deadline?"));
 
-        var captor = org.mockito.ArgumentCaptor.forClass(SearchRequest.class);
+        var captor = ArgumentCaptor.forClass(SearchRequest.class);
         verify(vectorStore).similaritySearch(captor.capture());
 
         var expected = new FilterExpressionBuilder().eq("tenantId", "achu-bank").build();

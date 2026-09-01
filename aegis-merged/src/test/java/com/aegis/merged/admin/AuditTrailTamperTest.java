@@ -12,6 +12,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.flywaydb.core.Flyway;
 
 @Testcontainers
 @EnabledIfEnvironmentVariable(named = "RUN_CONTAINER_TESTS", matches = "true")
@@ -36,7 +37,7 @@ class AuditTrailTamperTest {
 
     @BeforeEach
     void freshTable() {
-        var flyway = org.flywaydb.core.Flyway.configure()
+        var flyway = Flyway.configure()
                 .dataSource(jdbc.getDataSource())
                 .cleanDisabled(false)
                 .load();

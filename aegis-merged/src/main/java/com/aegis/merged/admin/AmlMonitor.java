@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.time.LocalDate;
 
 @Component
 public class AmlMonitor {
@@ -46,7 +47,7 @@ public class AmlMonitor {
             }
         }
 
-        Map<java.time.LocalDate, Long> byDay = txns.stream()
+        Map<LocalDate, Long> byDay = txns.stream()
                 .filter(t -> !isSelfTransfer(t))
                 .collect(Collectors.groupingBy(BankingService.Transaction::date, Collectors.counting()));
         byDay.forEach((day, count) -> {

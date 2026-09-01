@@ -13,6 +13,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import java.util.List;
+import org.flywaydb.core.Flyway;
 
 @Testcontainers
 @EnabledIfEnvironmentVariable(named = "RUN_CONTAINER_TESTS", matches = "true")
@@ -37,7 +38,7 @@ class WidgetHistoryStoreTurnAlignmentTest {
 
     @BeforeEach
     void freshTables() {
-        var flyway = org.flywaydb.core.Flyway.configure()
+        var flyway = Flyway.configure()
                 .dataSource(jdbc.getDataSource())
                 .cleanDisabled(false)
                 .load();

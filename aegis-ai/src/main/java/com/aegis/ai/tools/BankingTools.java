@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import com.aegis.ai.admin.AuditTrail;
 
 @Component
 public class BankingTools {
@@ -32,9 +33,9 @@ public class BankingTools {
     }
 
     private final BankingService banking;
-    private final com.aegis.ai.admin.AuditTrail audit;
+    private final AuditTrail audit;
 
-    public BankingTools(BankingService banking, com.aegis.ai.admin.AuditTrail audit) {
+    public BankingTools(BankingService banking, AuditTrail audit) {
         this.banking = banking;
         this.audit = audit;
     }

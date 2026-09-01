@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
+import dev.langchain4j.service.SystemMessage;
 
 @RestController
 @RequestMapping("/api/rag")
@@ -29,7 +30,7 @@ public class RagController {
             """;
 
     interface RagAssistant {
-        @dev.langchain4j.service.SystemMessage(RAG_PROMPT)
+        @SystemMessage(RAG_PROMPT)
         String answer(String question);
     }
 

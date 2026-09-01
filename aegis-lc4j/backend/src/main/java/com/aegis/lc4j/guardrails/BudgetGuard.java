@@ -5,6 +5,8 @@ import org.springframework.stereotype.Component;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 
 @Component
 public class BudgetGuard {
@@ -28,7 +30,7 @@ public class BudgetGuard {
     }
 
     private AtomicLong todays(String tenant) {
-        long today = java.time.LocalDate.now(java.time.ZoneOffset.UTC).toEpochDay();
+        long today = LocalDate.now(ZoneOffset.UTC).toEpochDay();
         return windows.compute(tenant, (k, w) ->
                 (w == null || w.epochDay() != today) ? new Window(today, new AtomicLong()) : w
         ).used();

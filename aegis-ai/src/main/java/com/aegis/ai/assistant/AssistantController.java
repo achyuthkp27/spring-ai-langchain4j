@@ -31,6 +31,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import org.springframework.ai.chat.messages.MessageType;
 
 @RestController
 @RequestMapping("/api/assistant")
@@ -84,10 +86,10 @@ public class AssistantController {
         var messages = chatMemory.get(memoryKey);
         if (messages == null) return List.of();
         return messages.stream()
-                .filter(m -> m.getMessageType() == org.springframework.ai.chat.messages.MessageType.USER
-                          || m.getMessageType() == org.springframework.ai.chat.messages.MessageType.ASSISTANT)
+                .filter(m -> m.getMessageType() == MessageType.USER
+                          || m.getMessageType() == MessageType.ASSISTANT)
                 .map(m -> Map.of(
-                        "role", m.getMessageType() == org.springframework.ai.chat.messages.MessageType.USER
+                        "role", m.getMessageType() == MessageType.USER
                                 ? "user" : "assistant",
                         "text", m.getText() == null ? "" : m.getText()))
                 .toList();
@@ -207,7 +209,7 @@ public class AssistantController {
 
         return Flux.merge(answer, statusEvents).onErrorResume(err -> {
             long ms = (System.nanoTime() - start) / 1_000_000;
-            String msg = err instanceof io.github.resilience4j.circuitbreaker.CallNotPermittedException
+            String msg = err instanceof CallNotPermittedException
                     ? "The assistant is busy right now. Please retry in a moment."
                     : "That request took too long. Please try again.";
             audit.record(tenantId, userId, cid, "unavailable", ms, 0, redactedQ);

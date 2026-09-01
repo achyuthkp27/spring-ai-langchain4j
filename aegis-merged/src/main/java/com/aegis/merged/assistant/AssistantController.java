@@ -43,6 +43,16 @@ import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import com.aegis.merged.domain.BankingService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import io.github.resilience4j.bulkhead.BulkheadFullException;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import org.springframework.ai.chat.metadata.Usage;
+import org.springframework.ai.chat.model.ChatResponse;
+import reactor.core.publisher.SignalType;
+import reactor.core.scheduler.Schedulers;
 
 @RestController
 @RequestMapping("/api/assistant")
@@ -68,8 +78,8 @@ public class AssistantController {
     private final WidgetHistoryStore widgetHistoryStore;
 
     private final ObjectMapper json = new ObjectMapper()
-            .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
-            .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+            .registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     public AssistantController(@Qualifier("assistantClient") ChatClient assistant,
                               BankingTools bankingTools,
@@ -103,7 +113,7 @@ public class AssistantController {
         this.widgetHistoryStore = widgetHistoryStore;
     }
 
-    public record WidgetEvent(String type, com.fasterxml.jackson.databind.JsonNode payload) {
+    public record WidgetEvent(String type, JsonNode payload) {
     }
 
     public record HistoryMessage(String role, String text, List<WidgetEvent> widgets) {
@@ -229,21 +239,21 @@ public class AssistantController {
         Consumer<String> statusFn = statusSink::tryEmitNext;
 
         List<PendingWidget> pendingWidgets = new CopyOnWriteArrayList<>();
-        Sinks.Many<List<com.aegis.merged.domain.BankingService.Card>> cardsSink = Sinks.many().unicast().onBackpressureBuffer();
+        Sinks.Many<List<BankingService.Card>> cardsSink = Sinks.many().unicast().onBackpressureBuffer();
         var cardsFn = widgetChannel(cardsSink, pendingWidgets, "cards");
-        Sinks.Many<List<com.aegis.merged.domain.BankingService.Account>> accountsSink = Sinks.many().unicast().onBackpressureBuffer();
+        Sinks.Many<List<BankingService.Account>> accountsSink = Sinks.many().unicast().onBackpressureBuffer();
         var accountsFn = widgetChannel(accountsSink, pendingWidgets, "accounts");
-        Sinks.Many<List<com.aegis.merged.domain.BankingService.Transaction>> transactionsSink = Sinks.many().unicast().onBackpressureBuffer();
+        Sinks.Many<List<BankingService.Transaction>> transactionsSink = Sinks.many().unicast().onBackpressureBuffer();
         var transactionsFn = widgetChannel(transactionsSink, pendingWidgets, "transactions");
-        Sinks.Many<com.aegis.merged.domain.BankingService.DisputeCase> casesSink = Sinks.many().unicast().onBackpressureBuffer();
+        Sinks.Many<BankingService.DisputeCase> casesSink = Sinks.many().unicast().onBackpressureBuffer();
         var casesFn = widgetChannel(casesSink, pendingWidgets, "case");
-        Sinks.Many<com.aegis.merged.domain.BankingService.Approval> approvalsSink = Sinks.many().unicast().onBackpressureBuffer();
+        Sinks.Many<BankingService.Approval> approvalsSink = Sinks.many().unicast().onBackpressureBuffer();
         var approvalsFn = widgetChannel(approvalsSink, pendingWidgets, "approval");
         Sinks.Many<List<BankingTools.Citation>> citationsSink = Sinks.many().unicast().onBackpressureBuffer();
         var citationsFn = widgetChannel(citationsSink, pendingWidgets, "citations");
-        Sinks.Many<List<com.aegis.merged.domain.BankingService.LedgerEntry>> ledgerSink = Sinks.many().unicast().onBackpressureBuffer();
+        Sinks.Many<List<BankingService.LedgerEntry>> ledgerSink = Sinks.many().unicast().onBackpressureBuffer();
         var ledgerFn = widgetChannel(ledgerSink, pendingWidgets, "ledger");
-        Sinks.Many<com.aegis.merged.domain.BankingService.CustomerProfile> profileSink = Sinks.many().unicast().onBackpressureBuffer();
+        Sinks.Many<BankingService.CustomerProfile> profileSink = Sinks.many().unicast().onBackpressureBuffer();
         var profileFn = widgetChannel(profileSink, pendingWidgets, "profile");
         Sinks.Many<BankingTools.SpendingSummary> statementSink = Sinks.many().unicast().onBackpressureBuffer();
         var statementFn = widgetChannel(statementSink, pendingWidgets, "statement");
@@ -272,7 +282,7 @@ public class AssistantController {
                 Map.entry(BankingTools.PROFILE_KEY, profileFn),
                 Map.entry(BankingTools.STATEMENT_KEY, statementFn));
 
-        Supplier<Flux<org.springframework.ai.chat.model.ChatResponse>> callModel =
+        Supplier<Flux<ChatResponse>> callModel =
                 () -> llmGuard.guard(model.prompt()
                 .system(sp -> sp.param("bankName", TenantNames.displayName(tenantId)))
                 .user(redactedInput)
@@ -315,7 +325,7 @@ public class AssistantController {
                     long ms = ms(start);
                     audit.record(tenantId, userId, cid, "llm", ms, redactedAnswer.length(), redactedQ);
                     return Mono.just(metaEvent(new ChatReply(cid, redactedAnswer, "llm", ms, null, null)));
-                }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic()));
+                }).subscribeOn(Schedulers.boundedElastic()));
 
         Flux<ServerSentEvent<String>> statusEvents = statusSink.asFlux()
                 .map(s -> ServerSentEvent.<String>builder().event("status")
@@ -348,7 +358,7 @@ public class AssistantController {
                 .map(s -> ServerSentEvent.<String>builder().event("statement")
                         .data(toJson(s)).build());
         answer = answer.doFinally(sig -> {
-            if (sig == reactor.core.publisher.SignalType.CANCEL) {
+            if (sig == SignalType.CANCEL) {
                 audit.record(tenantId, userId, cid, "cancelled", ms(start), state.sanitized.length(), redactedQ);
                 persistCancelledTurnWidgets(memoryKey, pendingWidgets);
             }
@@ -371,8 +381,8 @@ public class AssistantController {
 
             boolean denied = err instanceof AccessDeniedException
                     || err.getCause() instanceof AccessDeniedException;
-            boolean busy = err instanceof io.github.resilience4j.circuitbreaker.CallNotPermittedException
-                    || err instanceof io.github.resilience4j.bulkhead.BulkheadFullException;
+            boolean busy = err instanceof CallNotPermittedException
+                    || err instanceof BulkheadFullException;
             String source = denied ? "denied" : "unavailable";
             String msg = denied
                     ? "I can't do that — it isn't one of your own accounts or cards."
@@ -423,12 +433,12 @@ public class AssistantController {
         final StringBuffer rawFull = new StringBuffer();
         final StringBuffer sanitized = new StringBuffer();
         final ThinkTagFilter filter = new ThinkTagFilter();
-        volatile org.springframework.ai.chat.metadata.Usage usage;
+        volatile Usage usage;
         volatile String finishReason;
     }
 
     Flux<ServerSentEvent<String>> streamTokens(
-            Flux<org.springframework.ai.chat.model.ChatResponse> responses, StreamState state) {
+            Flux<ChatResponse> responses, StreamState state) {
         Flux<ServerSentEvent<String>> chunks = responses
                 .doOnNext(cr -> {
                     if (cr.getMetadata() != null) {
